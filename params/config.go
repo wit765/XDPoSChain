@@ -418,6 +418,7 @@ type ChainConfig struct {
 	MergeBlock      *big.Int `json:"mergeBlock,omitempty"`
 	ShanghaiBlock   *big.Int `json:"shanghaiBlock,omitempty"`
 	Eip1559Block    *big.Int `json:"eip1559Block,omitempty"`
+	CancunBlock     *big.Int `json:"cancunBlock,omitempty"`
 
 	// Various consensus engines
 	Ethash *EthashConfig `json:"ethash,omitempty"`
@@ -582,7 +583,11 @@ func (c *ChainConfig) String() string {
 	if c.Eip1559Block != nil {
 		eip1559Block = c.Eip1559Block
 	}
-	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Istanbul: %v  BerlinBlock: %v LondonBlock: %v MergeBlock: %v ShanghaiBlock: %v Eip1559Block: %v Engine: %v}",
+	cancunBlock := common.CancunBlock
+	if c.CancunBlock != nil {
+		cancunBlock = c.CancunBlock
+	}
+	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Istanbul: %v  BerlinBlock: %v LondonBlock: %v MergeBlock: %v ShanghaiBlock: %v Eip1559Block: %v CancunBlock: %v Engine: %v}",
 		c.ChainId,
 		c.HomesteadBlock,
 		c.DAOForkBlock,
@@ -598,6 +603,7 @@ func (c *ChainConfig) String() string {
 		mergeBlock,
 		shanghaiBlock,
 		eip1559Block,
+		cancunBlock,
 		engine,
 	)
 }
@@ -667,6 +673,10 @@ func (c *ChainConfig) IsShanghai(num *big.Int) bool {
 
 func (c *ChainConfig) IsEIP1559(num *big.Int) bool {
 	return isForked(common.Eip1559Block, num) || isForked(c.Eip1559Block, num)
+}
+
+func (c *ChainConfig) IsCancun(num *big.Int) bool {
+	return isForked(common.CancunBlock, num) || isForked(c.CancunBlock, num)
 }
 
 func (c *ChainConfig) IsTIP2019(num *big.Int) bool {
@@ -777,6 +787,28 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 	if isForkIncompatible(c.ConstantinopleBlock, newcfg.ConstantinopleBlock, head) {
 		return newCompatError("Constantinople fork block", c.ConstantinopleBlock, newcfg.ConstantinopleBlock)
 	}
+	if isForkIncompatible(c.PetersburgBlock, newcfg.PetersburgBlock, head) {
+		// the only case where we allow Petersburg to be set in the past is if it is equal to Constantinople
+		// mainly to satisfy fork ordering requirements which state that Petersburg fork be set if Constantinople fork is set
+		if isForkIncompatible(c.ConstantinopleBlock, newcfg.PetersburgBlock, head) {
+			return newCompatError("Petersburg fork block", c.PetersburgBlock, newcfg.PetersburgBlock)
+		}
+	}
+	if isForkIncompatible(c.IstanbulBlock, newcfg.IstanbulBlock, head) {
+		return newCompatError("Istanbul fork block", c.IstanbulBlock, newcfg.IstanbulBlock)
+	}
+	if isForkIncompatible(c.BerlinBlock, newcfg.BerlinBlock, head) {
+		return newCompatError("Berlin fork block", c.BerlinBlock, newcfg.BerlinBlock)
+	}
+	if isForkIncompatible(c.LondonBlock, newcfg.LondonBlock, head) {
+		return newCompatError("London fork block", c.LondonBlock, newcfg.LondonBlock)
+	}
+	if isForkIncompatible(c.ShanghaiBlock, newcfg.ShanghaiBlock, head) {
+		return newCompatError("Shanghai fork timestamp", c.ShanghaiBlock, newcfg.ShanghaiBlock)
+	}
+	if isForkIncompatible(c.CancunBlock, newcfg.CancunBlock, head) {
+		return newCompatError("Cancun fork block", c.CancunBlock, newcfg.CancunBlock)
+	}
 	return nil
 }
 
@@ -848,6 +880,7 @@ type Rules struct {
 	IsMerge, IsShanghai                                     bool
 	IsXDCxDisable                                           bool
 	IsEIP1559                                               bool
+	IsCancun                                                bool
 }
 
 func (c *ChainConfig) Rules(num *big.Int) Rules {
@@ -871,5 +904,6 @@ func (c *ChainConfig) Rules(num *big.Int) Rules {
 		IsShanghai:       c.IsShanghai(num),
 		IsXDCxDisable:    c.IsXDCxDisable(num),
 		IsEIP1559:        c.IsEIP1559(num),
+		IsCancun:         c.IsCancun(num),
 	}
 }
