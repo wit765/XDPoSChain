@@ -17,13 +17,18 @@ package XDPoS
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"math/big"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/XinFinOrg/XDPoSChain/common"
 	"github.com/XinFinOrg/XDPoSChain/consensus"
 	"github.com/XinFinOrg/XDPoSChain/consensus/XDPoS/utils"
 	"github.com/XinFinOrg/XDPoSChain/core/types"
+	"github.com/XinFinOrg/XDPoSChain/log"
 	"github.com/XinFinOrg/XDPoSChain/params"
 	"github.com/XinFinOrg/XDPoSChain/rlp"
 	"github.com/XinFinOrg/XDPoSChain/rpc"
@@ -75,6 +80,22 @@ type MasternodesStatus struct {
 	Standbynodes    []common.Address
 	Error           error
 }
+
+type AccountEpochReward struct {
+	EpochBlockNum   uint64
+	Address         common.Address
+	AccountStatus   AccountRewardStatus
+	AccountReward   *big.Int
+	DelegatedReward map[string]*big.Int
+}
+
+type AccountRewardStatus string
+
+const (
+	statusMasternode    AccountRewardStatus = "MasterNode"
+	statusProtectornode AccountRewardStatus = "ProtectorNode"
+	statusObservernode  AccountRewardStatus = "ObserverNode"
+)
 
 type MessageStatus map[string]map[string]SignerTypes
 
@@ -313,6 +334,118 @@ func calculateSigners(message map[string]SignerTypes, pool map[string]map[common
 			MissingSigners: missingSigners,
 		}
 	}
+}
+
+func (api *API) GetRewardByAccount(account common.Address, begin rpc.BlockNumber, end rpc.BlockNumber) ([]AccountEpochReward, error) {
+	epochBlocks, err := api.GetEpochNumbersBetween(&begin, &end)
+	if err != nil {
+		return []AccountEpochReward{}, err
+	}
+	epochRewards := []AccountEpochReward{}
+	for _, epochBlock := range epochBlocks {
+		header := api.chain.GetHeaderByNumber(epochBlock)
+		if header == nil {
+			log.Error("[GetRewardByAccount] header not found, impossible case, please check or report to XDC", "err", err)
+			return []AccountEpochReward{}, err
+		}
+		epochReward, err := getEpochReward(account, header)
+		if err != nil {
+			return []AccountEpochReward{}, err
+		}
+		epochRewards = append(epochRewards, epochReward)
+	}
+
+	return epochRewards, nil
+}
+
+func getEpochReward(account common.Address, header *types.Header) (AccountEpochReward, error) {
+	var data map[string]interface{}
+	path := filepath.Join(common.StoreRewardFolder, header.Number.String()+"."+header.Hash().Hex())
+	alternatePath := filepath.Join(common.StoreRewardFolder, header.Number.String()+"."+header.HashNoValidator().Hex())
+	file, err := os.Open(path)
+	if err != nil {
+		file, err := os.Open(alternatePath)
+		if err != nil {
+			log.Warn("[getEpochReward] rewards file not found", "path", path, "alternatePath", alternatePath)
+			return AccountEpochReward{}, err
+		}
+		defer file.Close()
+		decoder := json.NewDecoder(file)
+		decoder.UseNumber()
+		if err := decoder.Decode(&data); err != nil {
+			log.Warn("[getEpochReward] Failed to decode JSON:", "err", err)
+			return AccountEpochReward{}, err
+		}
+	} else {
+		defer file.Close()
+		decoder := json.NewDecoder(file)
+		decoder.UseNumber()
+		if err := decoder.Decode(&data); err != nil {
+			log.Warn("[getEpochReward] Failed to decode JSON:", "err", err)
+			return AccountEpochReward{}, err
+		}
+	}
+
+	epochReward := AccountEpochReward{
+		Address:         account,
+		EpochBlockNum:   header.Number.Uint64(),
+		DelegatedReward: make(map[string]*big.Int),
+	}
+	epochReward.getRewardAndStatus(strings.ToLower(account.String0x()), data)
+
+	return epochReward, nil
+}
+
+func (rewardObj *AccountEpochReward) getRewardAndStatus(account string, data map[string]interface{}) {
+	if val, exists := data["signers"]; exists {
+		if val, exists := val.(map[string]interface{})[account]; exists {
+			nodeReward := val.(map[string]interface{})["reward"]
+			delegatedReward := data["rewards"].(map[string]interface{})[account]
+			rewardObj.AccountStatus = statusMasternode
+			nodeRewardBigInt, _ := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
+			rewardObj.AccountReward = nodeRewardBigInt
+
+			for k, v := range delegatedReward.(map[string]interface{}) {
+				delegatedBigInt, _ := new(big.Int).SetString(v.(json.Number).String(), 10)
+				rewardObj.DelegatedReward[k] = delegatedBigInt
+			}
+			return
+		}
+	}
+
+	if val, exists := data["signersProtector"]; exists {
+		if val, exists := val.(map[string]interface{})[account]; exists {
+			nodeReward := val.(map[string]interface{})["reward"]
+			delegatedReward := data["rewardsProtector"].(map[string]interface{})[account]
+			rewardObj.AccountStatus = statusProtectornode
+			nodeRewardBigInt, _ := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
+			rewardObj.AccountReward = nodeRewardBigInt
+
+			for k, v := range delegatedReward.(map[string]interface{}) {
+				delegatedBigInt, _ := new(big.Int).SetString(v.(json.Number).String(), 10)
+				rewardObj.DelegatedReward[k] = delegatedBigInt
+			}
+			return
+		}
+
+	}
+
+	if val, exists := data["signersObserver"]; exists {
+		if val, exists := val.(map[string]interface{})[account]; exists {
+			nodeReward := val.(map[string]interface{})["reward"]
+			delegatedReward := data["rewardsObserver"].(map[string]interface{})[account]
+			rewardObj.AccountStatus = statusObservernode
+			nodeRewardBigInt, _ := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
+			rewardObj.AccountReward = nodeRewardBigInt
+
+			for k, v := range delegatedReward.(map[string]interface{}) {
+				delegatedBigInt, _ := new(big.Int).SetString(v.(json.Number).String(), 10)
+				rewardObj.DelegatedReward[k] = delegatedBigInt
+			}
+			return
+		}
+	}
+
 }
 
 func (api *API) GetEpochNumbersBetween(begin, end *rpc.BlockNumber) ([]uint64, error) {
