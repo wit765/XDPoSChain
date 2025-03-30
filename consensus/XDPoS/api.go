@@ -22,6 +22,8 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/XinFinOrg/XDPoSChain/common"
@@ -87,6 +89,18 @@ type AccountEpochReward struct {
 	AccountStatus   AccountRewardStatus
 	AccountReward   *big.Int
 	DelegatedReward map[string]*big.Int
+}
+
+type TotalRewards struct {
+	Address              common.Address
+	StartBlockNum        uint64
+	EndBlockNum          uint64
+	TotalAccountReward   *big.Int
+	TotalDelegatedReward map[string]*big.Int
+}
+type AccountRewardResponse struct {
+	EpochRewards []AccountEpochReward
+	Total        TotalRewards
 }
 
 type AccountRewardStatus string
@@ -336,26 +350,97 @@ func calculateSigners(message map[string]SignerTypes, pool map[string]map[common
 	}
 }
 
-func (api *API) GetRewardByAccount(account common.Address, begin rpc.BlockNumber, end rpc.BlockNumber) ([]AccountEpochReward, error) {
-	epochBlocks, err := api.GetEpochNumbersBetween(&begin, &end)
+func (api *API) GetRewardByAccount(account common.Address, begin rpc.BlockNumber, end rpc.BlockNumber) (AccountRewardResponse, error) {
+	epochBlocks, err := api.getEpochNumbersFromRewardFiles(&begin, &end)
 	if err != nil {
-		return []AccountEpochReward{}, err
+		return AccountRewardResponse{}, err
 	}
 	epochRewards := []AccountEpochReward{}
 	for _, epochBlock := range epochBlocks {
 		header := api.chain.GetHeaderByNumber(epochBlock)
 		if header == nil {
-			log.Error("[GetRewardByAccount] header not found, impossible case, please check or report to XDC", "err", err)
-			return []AccountEpochReward{}, err
+			log.Error("[GetRewardByAccount] header not found, impossible case, please check your RPC", "err", err)
+			return AccountRewardResponse{}, err
 		}
 		epochReward, err := getEpochReward(account, header)
 		if err != nil {
-			return []AccountEpochReward{}, err
+			return AccountRewardResponse{}, err
 		}
 		epochRewards = append(epochRewards, epochReward)
 	}
 
-	return epochRewards, nil
+	total := TotalRewards{
+		Address:              account,
+		StartBlockNum:        uint64(begin.Int64()),
+		EndBlockNum:          uint64(end.Int64()),
+		TotalAccountReward:   big.NewInt(0),
+		TotalDelegatedReward: make(map[string]*big.Int),
+	}
+
+	for _, reward := range epochRewards {
+		total.TotalAccountReward = new(big.Int).Add(total.TotalAccountReward, reward.AccountReward)
+		for k, v := range reward.DelegatedReward {
+			_, exist := total.TotalDelegatedReward[k]
+			if exist {
+				total.TotalDelegatedReward[k] = new(big.Int).Add(total.TotalDelegatedReward[k], v)
+			} else {
+				total.TotalDelegatedReward[k] = v
+			}
+		}
+	}
+
+	response := AccountRewardResponse{
+		EpochRewards: epochRewards,
+		Total:        total,
+	}
+	return response, nil
+}
+
+func (api *API) getEpochNumbersFromRewardFiles(begin, end *rpc.BlockNumber) ([]uint64, error) {
+	beginHeader := api.getHeaderFromApiBlockNum(begin)
+	if beginHeader == nil {
+		return nil, errors.New("illegal begin block number")
+	}
+	endHeader := api.getHeaderFromApiBlockNum(end)
+	if endHeader == nil {
+		return nil, errors.New("illegal end block number")
+	}
+	if beginHeader.Number.Cmp(endHeader.Number) > 0 {
+		return nil, errors.New("illegal begin and end block number, begin > end")
+	}
+	if big.NewInt(1_500_000).Cmp(new(big.Int).Sub(endHeader.Number, beginHeader.Number)) < 0 {
+		return nil, errors.New("block range over limit of 1,500,000 blocks")
+	}
+	files, err := os.ReadDir(common.StoreRewardFolder)
+	if err != nil {
+		return nil, err
+	}
+
+	var epochNumbers []int
+	for _, file := range files {
+		if !file.IsDir() {
+			filePrefix, _, found := strings.Cut(file.Name(), ".")
+			if found {
+				filePrefixInt, err := strconv.Atoi(filePrefix)
+				if err != nil {
+					log.Warn("[getEpochNumbersFromRewardFiles] found unknown filename format in rewards folder")
+					return nil, err
+				}
+				epochNumbers = append(epochNumbers, filePrefixInt)
+			}
+		}
+	}
+	sort.Ints(epochNumbers)
+	startIndex := sort.SearchInts(epochNumbers, int(beginHeader.Number.Int64()))
+	endIndex := sort.SearchInts(epochNumbers, int(endHeader.Number.Int64()))
+
+	var epochNumbersInRange []uint64
+	for i := startIndex; i <= endIndex; i++ {
+		number := uint64(epochNumbers[i])
+		epochNumbersInRange = append(epochNumbersInRange, number)
+	}
+
+	return epochNumbersInRange, nil
 }
 
 func getEpochReward(account common.Address, header *types.Header) (AccountEpochReward, error) {
