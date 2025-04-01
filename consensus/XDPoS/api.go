@@ -408,7 +408,11 @@ func (api *API) getEpochNumbersFromRewardFiles(begin, end *rpc.BlockNumber) ([]u
 	if beginHeader.Number.Cmp(endHeader.Number) > 0 {
 		return nil, errors.New("illegal begin and end block number, begin > end")
 	}
-	if big.NewInt(1_500_000).Cmp(new(big.Int).Sub(endHeader.Number, beginHeader.Number)) < 0 {
+	diff := new(big.Int).Sub(endHeader.Number, beginHeader.Number).Int64()
+	if diff < 0 {
+		return nil, errors.New("illegal begin and end block number, begin > end")
+	}
+	if diff > 1_500_000 {
 		return nil, errors.New("block range over limit of 1,500,000 blocks")
 	}
 	files, err := os.ReadDir(common.StoreRewardFolder)
@@ -444,33 +448,26 @@ func (api *API) getEpochNumbersFromRewardFiles(begin, end *rpc.BlockNumber) ([]u
 }
 
 func getEpochReward(account common.Address, header *types.Header) (AccountEpochReward, error) {
-	var data map[string]interface{}
 	path := filepath.Join(common.StoreRewardFolder, header.Number.String()+"."+header.Hash().Hex())
-	alternatePath := filepath.Join(common.StoreRewardFolder, header.Number.String()+"."+header.HashNoValidator().Hex())
 	file, err := os.Open(path)
 	if err != nil {
-		file, err := os.Open(alternatePath)
+		alternatePath := filepath.Join(common.StoreRewardFolder, header.Number.String()+"."+header.HashNoValidator().Hex())
+		file, err = os.Open(alternatePath)
 		if err != nil {
 			log.Warn("[getEpochReward] rewards file not found", "path", path, "alternatePath", alternatePath)
 			return AccountEpochReward{}, err
 		}
-		defer file.Close()
-		decoder := json.NewDecoder(file)
-		decoder.UseNumber()
-		if err := decoder.Decode(&data); err != nil {
-			log.Warn("[getEpochReward] Failed to decode JSON:", "err", err)
-			return AccountEpochReward{}, err
-		}
-	} else {
-		defer file.Close()
-		decoder := json.NewDecoder(file)
-		decoder.UseNumber()
-		if err := decoder.Decode(&data); err != nil {
-			log.Warn("[getEpochReward] Failed to decode JSON:", "err", err)
-			return AccountEpochReward{}, err
-		}
 	}
+	defer file.Close()
+	decoder := json.NewDecoder(file)
+	decoder.UseNumber()
 
+	var data map[string]interface{}
+	if err := decoder.Decode(&data); err != nil {
+		log.Warn("[getEpochReward] Failed to decode JSON:", "err", err)
+		return AccountEpochReward{}, err
+	}
+	
 	epochReward := AccountEpochReward{
 		Address:         account,
 		EpochBlockNum:   header.Number.Uint64(),
@@ -482,9 +479,9 @@ func getEpochReward(account common.Address, header *types.Header) (AccountEpochR
 }
 
 func (rewardObj *AccountEpochReward) getRewardAndStatus(account string, data map[string]interface{}) {
-	if val, exists := data["signers"]; exists {
-		if val, exists := val.(map[string]interface{})[account]; exists {
-			nodeReward := val.(map[string]interface{})["reward"]
+	if signersData, exists := data["signers"]; exists {
+		if accountData, ok := signersData.(map[string]interface{})[account]; ok {
+			nodeReward := accountData.(map[string]interface{})["reward"]
 			delegatedReward := data["rewards"].(map[string]interface{})[account]
 			rewardObj.AccountStatus = statusMasternode
 			nodeRewardBigInt, _ := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
@@ -498,9 +495,9 @@ func (rewardObj *AccountEpochReward) getRewardAndStatus(account string, data map
 		}
 	}
 
-	if val, exists := data["signersProtector"]; exists {
-		if val, exists := val.(map[string]interface{})[account]; exists {
-			nodeReward := val.(map[string]interface{})["reward"]
+	if signersData, exists := data["signersProtector"]; exists {
+		if accountData, ok := signersData.(map[string]interface{})[account]; ok {
+			nodeReward := accountData.(map[string]interface{})["reward"]
 			delegatedReward := data["rewardsProtector"].(map[string]interface{})[account]
 			rewardObj.AccountStatus = statusProtectornode
 			nodeRewardBigInt, _ := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
@@ -515,9 +512,9 @@ func (rewardObj *AccountEpochReward) getRewardAndStatus(account string, data map
 
 	}
 
-	if val, exists := data["signersObserver"]; exists {
-		if val, exists := val.(map[string]interface{})[account]; exists {
-			nodeReward := val.(map[string]interface{})["reward"]
+	if signersData, exists := data["signersObserver"]; exists {
+		if accountData, ok := signersData.(map[string]interface{})[account]; ok {
+			nodeReward := accountData.(map[string]interface{})["reward"]
 			delegatedReward := data["rewardsObserver"].(map[string]interface{})[account]
 			rewardObj.AccountStatus = statusObservernode
 			nodeRewardBigInt, _ := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
