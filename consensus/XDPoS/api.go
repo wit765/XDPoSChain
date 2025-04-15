@@ -65,6 +65,7 @@ type SignerTypes struct {
 }
 
 type MasternodesStatus struct {
+	Epoch           uint64
 	Number          uint64
 	Round           types.Round
 	MasternodesLen  int
@@ -147,11 +148,13 @@ func (api *API) GetMasternodesByNumber(number *rpc.BlockNumber) MasternodesStatu
 		}
 	}
 
+	epochNum := api.XDPoS.config.V2.SwitchEpoch + uint64(round)/api.XDPoS.config.Epoch
 	masterNodes := api.XDPoS.EngineV2.GetMasternodes(api.chain, header)
 	penalties := api.XDPoS.EngineV2.GetPenalties(api.chain, header)
 	standbynodes := api.XDPoS.EngineV2.GetStandbynodes(api.chain, header)
 
 	info := MasternodesStatus{
+		Epoch:           epochNum,
 		Number:          header.Number.Uint64(),
 		Round:           round,
 		MasternodesLen:  len(masterNodes),
