@@ -98,12 +98,18 @@ type TotalRewards struct {
 	TotalAccountReward   *big.Int
 	TotalDelegatedReward map[string]*big.Int
 }
+
 type AccountRewardResponse struct {
 	EpochRewards []AccountEpochReward
 	Total        TotalRewards
 }
 
 type AccountRewardStatus string
+
+type rewardFileName struct {
+	epochBlockNum  int
+	epochBlockHash common.Hash
+}
 
 const (
 	statusMasternode    AccountRewardStatus = "MasterNode"
@@ -351,16 +357,21 @@ func calculateSigners(message map[string]SignerTypes, pool map[string]map[common
 }
 
 func (api *API) GetRewardByAccount(account common.Address, begin rpc.BlockNumber, end rpc.BlockNumber) (AccountRewardResponse, error) {
-	epochBlocks, err := api.getEpochNumbersFromRewardFiles(&begin, &end)
+	rewardFileNames, err := api.getRewardFileNamesInRange(&begin, &end)
 	if err != nil {
 		return AccountRewardResponse{}, err
 	}
+
 	epochRewards := []AccountEpochReward{}
-	for _, epochBlock := range epochBlocks {
-		header := api.chain.GetHeaderByNumber(epochBlock)
+	for _, fileName := range rewardFileNames {
+		header := api.chain.GetHeaderByHash(fileName.epochBlockHash)
 		if header == nil {
-			log.Error("[GetRewardByAccount] header not found, impossible case, please check your RPC", "err", err)
-			return AccountRewardResponse{}, err
+			// this is the case when there is chain rollback but the reward files of the old chain still remain, skip the reward of unknown blockhash
+			continue
+		}
+		if int(header.Number.Int64()) != fileName.epochBlockNum {
+			log.Error("[GetRewardByAccount] block number mismatch in reward filename", "reward file blocknum", fileName.epochBlockNum, "header blocknum", int(header.Number.Int64()), "blockhash", header.Hash())
+			return AccountRewardResponse{}, errors.New("reward file block number mismatch")
 		}
 		epochReward, err := getEpochReward(account, header)
 		if err != nil {
@@ -396,7 +407,7 @@ func (api *API) GetRewardByAccount(account common.Address, begin rpc.BlockNumber
 	return response, nil
 }
 
-func (api *API) getEpochNumbersFromRewardFiles(begin, end *rpc.BlockNumber) ([]uint64, error) {
+func (api *API) getRewardFileNamesInRange(begin, end *rpc.BlockNumber) ([]rewardFileName, error) {
 	beginHeader := api.getHeaderFromApiBlockNum(begin)
 	if beginHeader == nil {
 		return nil, errors.New("illegal begin block number")
@@ -420,31 +431,43 @@ func (api *API) getEpochNumbersFromRewardFiles(begin, end *rpc.BlockNumber) ([]u
 		return nil, err
 	}
 
-	var epochNumbers []int
+	var rewardFileNames = []rewardFileName{}
 	for _, file := range files {
 		if !file.IsDir() {
-			filePrefix, _, found := strings.Cut(file.Name(), ".")
+			filePrefix, fileSuffix, found := strings.Cut(file.Name(), ".")
 			if found {
 				filePrefixInt, err := strconv.Atoi(filePrefix)
 				if err != nil {
 					log.Warn("[getEpochNumbersFromRewardFiles] found unknown filename format in rewards folder")
 					return nil, err
 				}
-				epochNumbers = append(epochNumbers, filePrefixInt)
+				fileSuffixHash := common.StringToHash(fileSuffix)
+				rewardName := rewardFileName{
+					epochBlockNum:  filePrefixInt,
+					epochBlockHash: fileSuffixHash,
+				}
+				rewardFileNames = append(rewardFileNames, rewardName)
 			}
 		}
 	}
-	sort.Ints(epochNumbers)
+
+	sort.Slice(rewardFileNames, func(i, j int) bool {
+		return rewardFileNames[i].epochBlockNum < rewardFileNames[j].epochBlockNum
+	})
+
+	epochNumbers := make([]int, len(rewardFileNames))
+	for i, obj := range rewardFileNames {
+		epochNumbers[i] = obj.epochBlockNum
+	}
+
 	startIndex := sort.SearchInts(epochNumbers, int(beginHeader.Number.Int64()))
 	endIndex := sort.SearchInts(epochNumbers, int(endHeader.Number.Int64()))
 
-	var epochNumbersInRange []uint64
-	for i := startIndex; i <= endIndex; i++ {
-		number := uint64(epochNumbers[i])
-		epochNumbersInRange = append(epochNumbersInRange, number)
+	var rewardfileNamesInRange []rewardFileName
+	for i:= startIndex; i<= endIndex; i++{
+		rewardfileNamesInRange = append(rewardfileNamesInRange, rewardFileNames[i])
 	}
-
-	return epochNumbersInRange, nil
+	return rewardfileNamesInRange, nil
 }
 
 func getEpochReward(account common.Address, header *types.Header) (AccountEpochReward, error) {
@@ -467,7 +490,7 @@ func getEpochReward(account common.Address, header *types.Header) (AccountEpochR
 		log.Warn("[getEpochReward] Failed to decode JSON:", "err", err)
 		return AccountEpochReward{}, err
 	}
-	
+
 	epochReward := AccountEpochReward{
 		Address:         account,
 		EpochBlockNum:   header.Number.Uint64(),
@@ -484,12 +507,16 @@ func (rewardObj *AccountEpochReward) getRewardAndStatus(account string, data map
 			nodeReward := accountData.(map[string]interface{})["reward"]
 			delegatedReward := data["rewards"].(map[string]interface{})[account]
 			rewardObj.AccountStatus = statusMasternode
-			nodeRewardBigInt, _ := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
-			rewardObj.AccountReward = nodeRewardBigInt
+			nodeRewardBigInt, ok := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
+			if ok {
+				rewardObj.AccountReward = nodeRewardBigInt
+			}
 
 			for k, v := range delegatedReward.(map[string]interface{}) {
-				delegatedBigInt, _ := new(big.Int).SetString(v.(json.Number).String(), 10)
-				rewardObj.DelegatedReward[k] = delegatedBigInt
+				delegatedBigInt, ok := new(big.Int).SetString(v.(json.Number).String(), 10)
+				if ok {
+					rewardObj.DelegatedReward[k] = delegatedBigInt
+				}
 			}
 			return
 		}
@@ -500,12 +527,16 @@ func (rewardObj *AccountEpochReward) getRewardAndStatus(account string, data map
 			nodeReward := accountData.(map[string]interface{})["reward"]
 			delegatedReward := data["rewardsProtector"].(map[string]interface{})[account]
 			rewardObj.AccountStatus = statusProtectornode
-			nodeRewardBigInt, _ := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
-			rewardObj.AccountReward = nodeRewardBigInt
+			nodeRewardBigInt, successSetNodeReward := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
+			if successSetNodeReward {
+				rewardObj.AccountReward = nodeRewardBigInt
+			}
 
 			for k, v := range delegatedReward.(map[string]interface{}) {
-				delegatedBigInt, _ := new(big.Int).SetString(v.(json.Number).String(), 10)
-				rewardObj.DelegatedReward[k] = delegatedBigInt
+				delegatedBigInt, successSetDelegatedReward := new(big.Int).SetString(v.(json.Number).String(), 10)
+				if successSetDelegatedReward {
+					rewardObj.DelegatedReward[k] = delegatedBigInt
+				}
 			}
 			return
 		}
@@ -517,12 +548,16 @@ func (rewardObj *AccountEpochReward) getRewardAndStatus(account string, data map
 			nodeReward := accountData.(map[string]interface{})["reward"]
 			delegatedReward := data["rewardsObserver"].(map[string]interface{})[account]
 			rewardObj.AccountStatus = statusObservernode
-			nodeRewardBigInt, _ := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
-			rewardObj.AccountReward = nodeRewardBigInt
+			nodeRewardBigInt, successSetNodeReward := new(big.Int).SetString(nodeReward.(json.Number).String(), 10)
+			if successSetNodeReward {
+				rewardObj.AccountReward = nodeRewardBigInt
+			}
 
 			for k, v := range delegatedReward.(map[string]interface{}) {
-				delegatedBigInt, _ := new(big.Int).SetString(v.(json.Number).String(), 10)
-				rewardObj.DelegatedReward[k] = delegatedBigInt
+				delegatedBigInt, successSetDelegatedReward := new(big.Int).SetString(v.(json.Number).String(), 10)
+				if successSetDelegatedReward {
+					rewardObj.DelegatedReward[k] = delegatedBigInt
+				}
 			}
 			return
 		}
