@@ -124,39 +124,30 @@ func GetAPIs(apiBackend Backend, chainReader consensus.ChainReader) []rpc.API {
 	return []rpc.API{
 		{
 			Namespace: "eth",
-			Version:   "1.0",
 			Service:   NewPublicEthereumAPI(apiBackend),
 		}, {
 			Namespace: "eth",
-			Version:   "1.0",
 			Service:   NewPublicBlockChainAPI(apiBackend, chainReader),
 		}, {
 			Namespace: "eth",
-			Version:   "1.0",
 			Service:   NewPublicTransactionPoolAPI(apiBackend, nonceLock),
 		}, {
 			Namespace: "XDCx",
-			Version:   "1.0",
 			Service:   NewPublicXDCXTransactionPoolAPI(apiBackend, nonceLock),
 		}, {
 			Namespace: "txpool",
-			Version:   "1.0",
 			Service:   NewPublicTxPoolAPI(apiBackend),
 		}, {
 			Namespace: "debug",
-			Version:   "1.0",
 			Service:   NewPublicDebugAPI(apiBackend),
 		}, {
 			Namespace: "debug",
-			Version:   "1.0",
 			Service:   NewPrivateDebugAPI(apiBackend),
 		}, {
 			Namespace: "eth",
-			Version:   "1.0",
 			Service:   NewPublicAccountAPI(apiBackend.AccountManager()),
 		}, {
 			Namespace: "personal",
-			Version:   "1.0",
 			Service:   NewPrivateAccountAPI(apiBackend, nonceLock),
 		},
 	}
