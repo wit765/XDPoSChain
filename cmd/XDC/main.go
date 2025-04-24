@@ -147,6 +147,7 @@ var (
 		utils.HTTPListenAddrFlag,
 		utils.HTTPPortFlag,
 		utils.HTTPReadTimeoutFlag,
+		utils.HTTPReadHeaderTimeoutFlag,
 		utils.HTTPWriteTimeoutFlag,
 		utils.HTTPIdleTimeoutFlag,
 		utils.HTTPApiFlag,
