@@ -244,10 +244,19 @@ func New(stack *node.Node, config *ethconfig.Config, XDCXServ *XDCx.XDCX, lendin
 	eth.miner = miner.New(eth, eth.chainConfig, eth.EventMux(), eth.engine, stack.Config().AnnounceTxs)
 	eth.miner.SetExtra(makeExtraData(config.ExtraData))
 
+	var xdPoS *XDPoS.XDPoS = nil
 	if eth.chainConfig.XDPoS != nil {
-		eth.ApiBackend = &EthAPIBackend{eth, nil, eth.engine.(*XDPoS.XDPoS)}
-	} else {
-		eth.ApiBackend = &EthAPIBackend{eth, nil, nil}
+		xdPoS = eth.engine.(*XDPoS.XDPoS)
+	}
+	eth.ApiBackend = &EthAPIBackend{
+		allowUnprotectedTxs: stack.Config().AllowUnprotectedTxs,
+		eth:                 eth,
+		gpo:                 nil,
+		XDPoS:               xdPoS,
+	}
+
+	if eth.ApiBackend.allowUnprotectedTxs {
+		log.Info("Unprotected transactions allowed")
 	}
 	eth.ApiBackend.gpo = gasprice.NewOracle(eth.ApiBackend, config.GPO, config.GasPrice)
 
