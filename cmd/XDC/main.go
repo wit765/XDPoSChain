@@ -166,6 +166,8 @@ var (
 		utils.IPCPathFlag,
 		utils.RPCGlobalTxFeeCap,
 		utils.AllowUnprotectedTxs,
+		utils.BatchRequestLimit,
+		utils.BatchResponseMaxSize,
 	}
 
 	metricsFlags = []cli.Flag{
