@@ -45,9 +45,11 @@ func TestBlockNumberJSONUnmarshal(t *testing.T) {
 		11: {`"pending"`, false, PendingBlockNumber},
 		12: {`"latest"`, false, LatestBlockNumber},
 		13: {`"earliest"`, false, EarliestBlockNumber},
-		14: {`someString`, true, BlockNumber(0)},
-		15: {`""`, true, BlockNumber(0)},
-		16: {``, true, BlockNumber(0)},
+		14: {`"committed"`, false, CommittedBlockNumber},
+		15: {`"finalized"`, false, CommittedBlockNumber},
+		16: {`someString`, true, BlockNumber(0)},
+		17: {`""`, true, BlockNumber(0)},
+		18: {``, true, BlockNumber(0)},
 	}
 
 	for i, test := range tests {
@@ -87,18 +89,22 @@ func TestBlockNumberOrHash_UnmarshalJSON(t *testing.T) {
 		11: {`"pending"`, false, BlockNumberOrHashWithNumber(PendingBlockNumber)},
 		12: {`"latest"`, false, BlockNumberOrHashWithNumber(LatestBlockNumber)},
 		13: {`"earliest"`, false, BlockNumberOrHashWithNumber(EarliestBlockNumber)},
-		14: {`someString`, true, BlockNumberOrHash{}},
-		15: {`""`, true, BlockNumberOrHash{}},
-		16: {``, true, BlockNumberOrHash{}},
-		17: {`"0x0000000000000000000000000000000000000000000000000000000000000000"`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
-		18: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
-		19: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000","requireCanonical":false}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
-		20: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000","requireCanonical":true}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), true)},
-		21: {`{"blockNumber":"0x1"}`, false, BlockNumberOrHashWithNumber(1)},
-		22: {`{"blockNumber":"pending"}`, false, BlockNumberOrHashWithNumber(PendingBlockNumber)},
-		23: {`{"blockNumber":"latest"}`, false, BlockNumberOrHashWithNumber(LatestBlockNumber)},
-		24: {`{"blockNumber":"earliest"}`, false, BlockNumberOrHashWithNumber(EarliestBlockNumber)},
-		25: {`{"blockNumber":"0x1", "blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}`, true, BlockNumberOrHash{}},
+		14: {`"committed"`, false, BlockNumberOrHashWithNumber(CommittedBlockNumber)},
+		15: {`"finalized"`, false, BlockNumberOrHashWithNumber(CommittedBlockNumber)},
+		16: {`someString`, true, BlockNumberOrHash{}},
+		17: {`""`, true, BlockNumberOrHash{}},
+		18: {``, true, BlockNumberOrHash{}},
+		19: {`"0x0000000000000000000000000000000000000000000000000000000000000000"`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
+		20: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
+		21: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000","requireCanonical":false}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
+		22: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000","requireCanonical":true}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), true)},
+		23: {`{"blockNumber":"0x1"}`, false, BlockNumberOrHashWithNumber(1)},
+		24: {`{"blockNumber":"pending"}`, false, BlockNumberOrHashWithNumber(PendingBlockNumber)},
+		25: {`{"blockNumber":"latest"}`, false, BlockNumberOrHashWithNumber(LatestBlockNumber)},
+		26: {`{"blockNumber":"earliest"}`, false, BlockNumberOrHashWithNumber(EarliestBlockNumber)},
+		27: {`{"blockNumber":"committed"}`, false, BlockNumberOrHashWithNumber(CommittedBlockNumber)},
+		28: {`{"blockNumber":"finalized"}`, false, BlockNumberOrHashWithNumber(CommittedBlockNumber)},
+		29: {`{"blockNumber":"0x1", "blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}`, true, BlockNumberOrHash{}},
 	}
 
 	for i, test := range tests {
@@ -133,8 +139,8 @@ func TestBlockNumberOrHash_WithNumber_MarshalAndUnmarshal(t *testing.T) {
 		{"pending", int64(PendingBlockNumber)},
 		{"latest", int64(LatestBlockNumber)},
 		{"earliest", int64(EarliestBlockNumber)},
-		{"finalized", int64(CommittedBlockNumber)},
 		{"committed", int64(CommittedBlockNumber)},
+		{"finalized", int64(CommittedBlockNumber)},
 	}
 	for _, test := range tests {
 		test := test
@@ -162,6 +168,7 @@ func TestBlockNumberOrHash_StringAndUnmarshal(t *testing.T) {
 		BlockNumberOrHashWithNumber(PendingBlockNumber),
 		BlockNumberOrHashWithNumber(LatestBlockNumber),
 		BlockNumberOrHashWithNumber(EarliestBlockNumber),
+		BlockNumberOrHashWithNumber(CommittedBlockNumber),
 		BlockNumberOrHashWithNumber(32),
 		BlockNumberOrHashWithHash(common.Hash{0xaa}, false),
 	}
