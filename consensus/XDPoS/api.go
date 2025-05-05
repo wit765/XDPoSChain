@@ -389,7 +389,9 @@ func (api *API) GetRewardByAccount(account common.Address, begin rpc.BlockNumber
 	}
 
 	for _, reward := range epochRewards {
-		total.TotalAccountReward = new(big.Int).Add(total.TotalAccountReward, reward.AccountReward)
+		if reward.AccountReward != nil {
+			total.TotalAccountReward = new(big.Int).Add(total.TotalAccountReward, reward.AccountReward)
+		}
 		for k, v := range reward.DelegatedReward {
 			_, exist := total.TotalDelegatedReward[k]
 			if exist {
@@ -441,7 +443,7 @@ func (api *API) getRewardFileNamesInRange(begin, end *rpc.BlockNumber) ([]reward
 					log.Warn("[getEpochNumbersFromRewardFiles] found unknown filename format in rewards folder")
 					return nil, err
 				}
-				fileSuffixHash := common.StringToHash(fileSuffix)
+				fileSuffixHash := common.HexToHash(fileSuffix)
 				rewardName := rewardFileName{
 					epochBlockNum:  filePrefixInt,
 					epochBlockHash: fileSuffixHash,
@@ -464,7 +466,7 @@ func (api *API) getRewardFileNamesInRange(begin, end *rpc.BlockNumber) ([]reward
 	endIndex := sort.SearchInts(epochNumbers, int(endHeader.Number.Int64()))
 
 	var rewardfileNamesInRange []rewardFileName
-	for i:= startIndex; i<= endIndex; i++{
+	for i := startIndex; i <= endIndex; i++ {
 		rewardfileNamesInRange = append(rewardfileNamesInRange, rewardFileNames[i])
 	}
 	return rewardfileNamesInRange, nil
