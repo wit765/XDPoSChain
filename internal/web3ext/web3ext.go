@@ -317,11 +317,6 @@ web3._extend({
 			params: 1
 		}),
 		new web3._extend.Method({
-			name: 'backtraceAt',
-			call: 'debug_backtraceAt',
-			params: 1,
-		}),
-		new web3._extend.Method({
 			name: 'stacks',
 			call: 'debug_stacks',
 			params: 0,
@@ -396,11 +391,6 @@ web3._extend({
 			name: 'mutexProfile',
 			call: 'debug_mutexProfile',
 			params: 2
-		}),
-		new web3._extend.Method({
-			name: 'setMutexProfileRate',
-			call: 'debug_setMutexProfileRate',
-			params: 1
 		}),
 		new web3._extend.Method({
 			name: 'writeMutexProfile',
