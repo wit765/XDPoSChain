@@ -185,6 +185,31 @@ func EncodeBig(bigint *big.Int) string {
 	}
 }
 
+// Add more comprehensive check to validate a hex string
+func IsValidHexString(input string) bool {
+	if !has0xPrefix(input) {
+		return false
+	}
+
+	hexPart := input[2:]
+	if len(hexPart) == 0 {
+		return false
+	}
+
+	for _, c := range hexPart {
+		if !isHexChar(c) {
+			return false
+		}
+	}
+	return true
+}
+
+func isHexChar(c rune) bool {
+	return ('0' <= c && c <= '9') ||
+		('a' <= c && c <= 'f') ||
+		('A' <= c && c <= 'F')
+}
+
 func has0xPrefix(input string) bool {
 	return len(input) >= 2 && input[0] == '0' && (input[1] == 'x' || input[1] == 'X')
 }
