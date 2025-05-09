@@ -185,7 +185,6 @@ func EncodeBig(bigint *big.Int) string {
 	}
 }
 
-// Add more comprehensive check to validate a hex string
 func IsValidHexString(input string) bool {
 	if !has0xPrefix(input) {
 		return false
