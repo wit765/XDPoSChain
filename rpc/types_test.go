@@ -53,6 +53,10 @@ func TestBlockNumberJSONUnmarshal(t *testing.T) {
 		17: {`""`, true, BlockNumber(0)},
 		18: {``, true, BlockNumber(0)},
 		19: {`88439993`, false, BlockNumber(88439993)},
+		20: {`-1`, true, BlockNumber(0)},
+		21: {`MaxInt64`, true, BlockNumber(0)},
+		22: {`MinInt64`, true, BlockNumber(0)},
+		23: {`MaxUint64`, true, BlockNumber(0)},
 	}
 
 	for i, test := range tests {
