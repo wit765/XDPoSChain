@@ -141,7 +141,7 @@ var (
 	}
 
 	hexStringValidityTest = []hexValidityTest{
-		{"0x", false},
+		{"0x", true},
 		{"asdcc", false},
 		{"0x00000102", true},
 	}
@@ -213,9 +213,9 @@ func TestDecodeUint64(t *testing.T) {
 	}
 }
 
-func TestIsValidHexString(t *testing.T) {
+func TestHas0xPrefix(t *testing.T) {
 	for _, test := range hexStringValidityTest {
-		actual := IsValidHexString(test.input)
+		actual := Has0xPrefix(test.input)
 		if actual != test.want {
 			t.Errorf("input %s: value mismatch: got %t, want %t", test.input, actual, test.want)
 		}
