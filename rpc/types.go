@@ -104,7 +104,7 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error {
 	var err error
 
 	//Check if input is valid hex string before converting.
-	if hexutil.IsValidHexString(input) {
+	if hexutil.Has0xPrefix(input) {
 		blckNum, err = hexutil.DecodeUint64(input)
 	} else {
 		//Else try converting input directly into uint64 value
