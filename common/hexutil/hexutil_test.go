@@ -22,6 +22,11 @@ import (
 	"testing"
 )
 
+type hexValidityTest struct {
+	input string
+	want  bool
+}
+
 type marshalTest struct {
 	input interface{}
 	want  string
@@ -134,6 +139,12 @@ var (
 		{input: `0xbbb`, want: uint64(0xbbb)},
 		{input: `0xffffffffffffffff`, want: uint64(0xffffffffffffffff)},
 	}
+
+	hexStringValidityTest = []hexValidityTest{
+		{"0x", true},
+		{"asdcc", false},
+		{"0x00000102", true},
+	}
 )
 
 func TestEncode(t *testing.T) {
@@ -198,6 +209,15 @@ func TestDecodeUint64(t *testing.T) {
 		if dec != test.want.(uint64) {
 			t.Errorf("input %s: value mismatch: got %x, want %x", test.input, dec, test.want)
 			continue
+		}
+	}
+}
+
+func TestHas0xPrefix(t *testing.T) {
+	for _, test := range hexStringValidityTest {
+		actual := Has0xPrefix(test.input)
+		if actual != test.want {
+			t.Errorf("input %s: value mismatch: got %t, want %t", test.input, actual, test.want)
 		}
 	}
 }

@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/XinFinOrg/XDPoSChain/common"
@@ -99,10 +100,21 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	blckNum, err := hexutil.DecodeUint64(input)
+	var blckNum uint64
+	var err error
+
+	//Check if input is valid hex string before converting.
+	if hexutil.Has0xPrefix(input) {
+		blckNum, err = hexutil.DecodeUint64(input)
+	} else {
+		//Else try converting input directly into uint64 value
+		blckNum, err = strconv.ParseUint(input, 10, 64)
+	}
+
 	if err != nil {
 		return err
 	}
+
 	if blckNum > math.MaxInt64 {
 		return errors.New("block number larger than int64")
 	}
