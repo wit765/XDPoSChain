@@ -467,6 +467,9 @@ func (api *API) getRewardFileNamesInRange(begin, end *rpc.BlockNumber) ([]reward
 
 	startIndex := sort.SearchInts(epochNumbers, int(beginHeader.Number.Int64()))
 	endIndex := sort.SearchInts(epochNumbers, int(endHeader.Number.Int64()))
+	if endIndex == len(epochNumbers) {
+		endIndex--  //this is to prevent endIndex out of bounds when endInput is higher than last reward(epoch) block but lower than latest block
+	}
 
 	var rewardfileNamesInRange []rewardFileName
 	for i := startIndex; i <= endIndex; i++ {
