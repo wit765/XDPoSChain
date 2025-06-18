@@ -155,7 +155,9 @@ jobs:
           kubectl set image deployment/devnetrpc devnetrpc=xinfinorg/devnet:dev-upgrade-${git_hash} || true
           kubectl set image deployment/devnetrpc2 devnetrpc2=xinfinorg/devnet:dev-upgrade-${git_hash} || true
           kubectl set image deployment/testnetrpc testnetrpc=xinfinorg/devnet:dev-upgrade-${git_hash} || true
+          kubectl set image deployment/testnetrpc2 testnetrpc=xinfinorg/devnet:dev-upgrade-${git_hash} || true
           kubectl set image deployment/mainnetrpc mainnetrpc=xinfinorg/devnet:dev-upgrade-${git_hash} || true
+          kubectl set image deployment/mainnetrpc2 mainnetrpc=xinfinorg/devnet:dev-upgrade-${git_hash} || true
           echo done
 
   devnet_send_notification:
