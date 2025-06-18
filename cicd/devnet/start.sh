@@ -77,6 +77,24 @@ else
   instance_ip=$INSTANCE_IP
 fi
 
+sync_mode=full
+if test -z "$SYNC_MODE"
+then
+  echo "SYNC_MODE not set, default to full" #full or fast
+else
+  echo "SYNC_MODE found, set to $SYNC_MODE"
+  sync_mode=$SYNC_MODE
+fi
+
+gc_mode=archive
+if test -z "$GC_MODE"
+then
+  echo "GC_MODE not set, default to archive" #full or archive
+else
+  echo "GC_MODE found, set to $GC_MODE"
+  gc_mode=$GC_MODE
+fi
+
 netstats="${NODE_NAME}-${wallet}-${instance_ip}:xinfin_xdpos_hybrid_network_stats@devnetstats.hashlabs.apothem.network:1999"
 
 
@@ -86,9 +104,10 @@ echo "Starting nodes with $bootnodes ..."
 # Note: --gcmode=archive means node will store all historical data. This will lead to high memory usage. But sync mode require archive to sync
 # https://github.com/XinFinOrg/XDPoSChain/issues/268
 
-XDC --ethstats ${netstats} --gcmode archive \
+XDC --ethstats ${netstats} \
+--gcmode ${gc_mode} --syncmode ${sync_mode} \
 --nat extip:${instance_ip} \
---bootnodes ${bootnodes} --syncmode full \
+--bootnodes ${bootnodes} \
 --datadir /work/xdcchain --networkid 551 \
 --port $port --http --http-corsdomain "*" --http-addr 0.0.0.0 \
 --http-port $rpc_port \
