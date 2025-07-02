@@ -439,11 +439,12 @@ func (s *StateSuite) TestTouchDelete(c *check.C) {
 
 	snapshot := s.state.Snapshot()
 	s.state.AddBalance(common.Address{}, new(big.Int))
-	if len(s.state.stateObjectsDirty) != 1 {
+
+	if len(s.state.journal.dirties) != 1 {
 		c.Fatal("expected one dirty state object")
 	}
 	s.state.RevertToSnapshot(snapshot)
-	if len(s.state.stateObjectsDirty) != 0 {
+	if len(s.state.journal.dirties) != 0 {
 		c.Fatal("expected no dirty state object")
 	}
 }
@@ -550,7 +551,7 @@ func TestStateDBAccessList(t *testing.T) {
 	verifySlots("cc", "01")
 
 	// now start rolling back changes
-	state.journal[7].undo(state)
+	state.journal.revert(state, 7)
 	if _, ok := state.SlotInAccessList(addr("cc"), slot("01")); ok {
 		t.Fatalf("slot present, expected missing")
 	}
@@ -558,7 +559,7 @@ func TestStateDBAccessList(t *testing.T) {
 	verifySlots("aa", "01")
 	verifySlots("bb", "01", "02", "03")
 
-	state.journal[6].undo(state)
+	state.journal.revert(state, 6)
 	if state.AddressInAccessList(addr("cc")) {
 		t.Fatalf("addr present, expected missing")
 	}
@@ -566,40 +567,40 @@ func TestStateDBAccessList(t *testing.T) {
 	verifySlots("aa", "01")
 	verifySlots("bb", "01", "02", "03")
 
-	state.journal[5].undo(state)
+	state.journal.revert(state, 5)
 	if _, ok := state.SlotInAccessList(addr("aa"), slot("01")); ok {
 		t.Fatalf("slot present, expected missing")
 	}
 	verifyAddrs("aa", "bb")
 	verifySlots("bb", "01", "02", "03")
 
-	state.journal[4].undo(state)
+	state.journal.revert(state, 4)
 	if _, ok := state.SlotInAccessList(addr("bb"), slot("03")); ok {
 		t.Fatalf("slot present, expected missing")
 	}
 	verifyAddrs("aa", "bb")
 	verifySlots("bb", "01", "02")
 
-	state.journal[3].undo(state)
+	state.journal.revert(state, 3)
 	if _, ok := state.SlotInAccessList(addr("bb"), slot("02")); ok {
 		t.Fatalf("slot present, expected missing")
 	}
 	verifyAddrs("aa", "bb")
 	verifySlots("bb", "01")
 
-	state.journal[2].undo(state)
+	state.journal.revert(state, 2)
 	if _, ok := state.SlotInAccessList(addr("bb"), slot("01")); ok {
 		t.Fatalf("slot present, expected missing")
 	}
 	verifyAddrs("aa", "bb")
 
-	state.journal[1].undo(state)
+	state.journal.revert(state, 1)
 	if state.AddressInAccessList(addr("bb")) {
 		t.Fatalf("addr present, expected missing")
 	}
 	verifyAddrs("aa")
 
-	state.journal[0].undo(state)
+	state.journal.revert(state, 0)
 	if state.AddressInAccessList(addr("aa")) {
 		t.Fatalf("addr present, expected missing")
 	}
@@ -642,7 +643,7 @@ func TestStateDBTransientStorage(t *testing.T) {
 
 	// revert the transient state being set and then check that the
 	// value is now the empty hash
-	state.journal[0].undo(state)
+	state.journal.revert(state, 0)
 	if got, exp := state.GetTransientState(addr, key), (common.Hash{}); exp != got {
 		t.Fatalf("transient storage mismatch: have %x, want %x", got, exp)
 	}
@@ -688,5 +689,20 @@ func TestDeleteCreateRevert(t *testing.T) {
 
 	if state.getStateObject(addr) != nil {
 		t.Fatalf("self-destructed contract came alive")
+	}
+}
+
+// TestCopyOfCopy tests that modified objects are carried over to the copy, and the copy of the copy.
+// See https://github.com/ethereum/go-ethereum/pull/15225#issuecomment-380191512
+func TestCopyOfCopy(t *testing.T) {
+	state, _ := New(types.EmptyRootHash, NewDatabase(rawdb.NewMemoryDatabase()))
+	addr := common.HexToAddress("aaaa")
+	state.SetBalance(addr, big.NewInt(42))
+
+	if got := state.Copy().GetBalance(addr).Uint64(); got != 42 {
+		t.Fatalf("1st copy fail, expected 42, got %v", got)
+	}
+	if got := state.Copy().Copy().GetBalance(addr).Uint64(); got != 42 {
+		t.Fatalf("2nd copy fail, expected 42, got %v", got)
 	}
 }
