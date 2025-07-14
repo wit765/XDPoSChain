@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -468,7 +469,7 @@ func (api *API) getRewardFileNamesInRange(begin, end *rpc.BlockNumber) ([]reward
 	startIndex := sort.SearchInts(epochNumbers, int(beginHeader.Number.Int64()))
 	endIndex := sort.SearchInts(epochNumbers, int(endHeader.Number.Int64()))
 	if endIndex == len(epochNumbers) {
-		endIndex--  //this is to prevent endIndex out of bounds when endInput is higher than last reward(epoch) block but lower than latest block
+		endIndex-- //this is to prevent endIndex out of bounds when endInput is higher than last reward(epoch) block but lower than latest block
 	}
 
 	var rewardfileNamesInRange []rewardFileName
@@ -604,15 +605,16 @@ func (api *API) GetEpochNumbersBetween(begin, end *rpc.BlockNumber) ([]uint64, e
 An API exclusively for V2 consensus, designed to assist in getting rewards of the epoch number.
 Given the epoch number, search the epoch switch block.
 */
-func (api *API) GetBlockInfoByEpochNum(epochNumber uint64) (*utils.EpochNumInfo, error) {
+func (api *API) GetBlockInfoByV2EpochNum(epochNumber uint64) (*utils.EpochNumInfo, error) {
 	thisEpoch, err := api.XDPoS.EngineV2.GetBlockByEpochNumber(api.chain, epochNumber)
 	if err != nil {
 		return nil, err
 	}
 	info := &utils.EpochNumInfo{
 		EpochBlockHash:        thisEpoch.Hash,
-		EpochRound:            thisEpoch.Round,
+		EpochRound:            &thisEpoch.Round,
 		EpochFirstBlockNumber: thisEpoch.Number,
+		EpochConsensusVersion: "v2",
 	}
 	nextEpoch, err := api.XDPoS.EngineV2.GetBlockByEpochNumber(api.chain, epochNumber+1)
 
@@ -620,4 +622,29 @@ func (api *API) GetBlockInfoByEpochNum(epochNumber uint64) (*utils.EpochNumInfo,
 		info.EpochLastBlockNumber = new(big.Int).Sub(nextEpoch.Number, big.NewInt(1))
 	}
 	return info, nil
+}
+
+func (api *API) CalculateBlockInfoByV1EpochNum(targetEpochNum uint64) (*utils.EpochNumInfo, error) {
+	epoch := api.XDPoS.config.Epoch //900
+	epochBlockNum := targetEpochNum*epoch + 1
+	currentBlock := api.chain.CurrentHeader().Number.Uint64()
+	if currentBlock < epochBlockNum {
+		return nil, fmt.Errorf("epoch not reached: current block number %d, epoch block number %d", currentBlock, epochBlockNum)
+	}
+
+	epochLastBlockNum := epochBlockNum + epoch - 1
+
+	return &utils.EpochNumInfo{
+		EpochBlockHash:        api.chain.GetHeaderByNumber(epochBlockNum).Hash(),
+		EpochFirstBlockNumber: big.NewInt(int64(epochBlockNum)),
+		EpochLastBlockNumber:  big.NewInt(int64(epochLastBlockNum)),
+		EpochConsensusVersion: "v1",
+	}, nil
+}
+
+func (api *API) GetBlockInfoByEpochNum(epochNumber uint64) (*utils.EpochNumInfo, error) {
+	if epochNumber < api.XDPoS.config.V2.SwitchEpoch {
+		return api.CalculateBlockInfoByV1EpochNum(epochNumber)
+	}
+	return api.GetBlockInfoByV2EpochNum(epochNumber)
 }

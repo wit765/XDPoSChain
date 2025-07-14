@@ -169,6 +169,7 @@ func TestGetEpochNumbersBetween(t *testing.T) {
 	assert.EqualError(t, err, "illegal begin block number")
 }
 func TestGetBlockByEpochNumber(t *testing.T) {
+	//todo
 	blockchain, _, currentBlock, signer, signFn := PrepareXDCTestBlockChainWithPenaltyForV2Engine(t, 1802, params.TestXDPoSMockChainConfig)
 
 	blockCoinBase := "0x111000000000000000000000000000000123"
