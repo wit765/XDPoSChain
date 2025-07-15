@@ -169,7 +169,6 @@ func TestGetEpochNumbersBetween(t *testing.T) {
 	assert.EqualError(t, err, "illegal begin block number")
 }
 func TestGetBlockByEpochNumber(t *testing.T) {
-	//todo
 	blockchain, _, currentBlock, signer, signFn := PrepareXDCTestBlockChainWithPenaltyForV2Engine(t, 1802, params.TestXDPoSMockChainConfig)
 
 	blockCoinBase := "0x111000000000000000000000000000000123"
@@ -201,19 +200,22 @@ func TestGetBlockByEpochNumber(t *testing.T) {
 	assert.Nil(t, err)
 
 	info, err := engine.APIs(blockchain)[0].Service.(*XDPoS.API).GetBlockInfoByEpochNum(0)
-	assert.NotNil(t, err)
-	assert.Nil(t, info)
+	assert.Equal(t, info.EpochConsensusVersion, "v1")
+	assert.Nil(t, err)
 
 	info, err = engine.APIs(blockchain)[0].Service.(*XDPoS.API).GetBlockInfoByEpochNum(1)
-	assert.Equal(t, info.EpochRound, types.Round(1))
+	assert.Equal(t, *info.EpochRound, types.Round(1))
+	assert.Equal(t, info.EpochConsensusVersion, "v2")
 	assert.Nil(t, err)
 
 	info, err = engine.APIs(blockchain)[0].Service.(*XDPoS.API).GetBlockInfoByEpochNum(2)
-	assert.Equal(t, info.EpochRound, types.Round(900))
+	assert.Equal(t, *info.EpochRound, types.Round(900))
+	assert.Equal(t, info.EpochConsensusVersion, "v2")
 	assert.Nil(t, err)
 
 	info, err = engine.APIs(blockchain)[0].Service.(*XDPoS.API).GetBlockInfoByEpochNum(3)
-	assert.Equal(t, info.EpochRound, types.Round(largeRound))
+	assert.Equal(t, *info.EpochRound, types.Round(largeRound))
+	assert.Equal(t, info.EpochConsensusVersion, "v2")
 	assert.Nil(t, err)
 
 	info, err = engine.APIs(blockchain)[0].Service.(*XDPoS.API).GetBlockInfoByEpochNum(4)
@@ -221,7 +223,8 @@ func TestGetBlockByEpochNumber(t *testing.T) {
 	assert.Nil(t, info)
 
 	info, err = engine.APIs(blockchain)[0].Service.(*XDPoS.API).GetBlockInfoByEpochNum(5)
-	assert.Equal(t, info.EpochRound, types.Round(largeRound2))
+	assert.Equal(t, *info.EpochRound, types.Round(largeRound2))
+	assert.Equal(t, info.EpochConsensusVersion, "v2")
 	assert.Nil(t, err)
 
 	info, err = engine.APIs(blockchain)[0].Service.(*XDPoS.API).GetBlockInfoByEpochNum(6)
