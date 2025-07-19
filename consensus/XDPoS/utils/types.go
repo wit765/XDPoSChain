@@ -75,10 +75,11 @@ type PublicApiMissedRoundsMetadata struct {
 
 // Given an epoch number, this struct records the epoch switch block (first block in epoch) infos such as block number
 type EpochNumInfo struct {
-	EpochBlockHash        common.Hash `json:"hash"`
-	EpochRound            types.Round `json:"round"`
-	EpochFirstBlockNumber *big.Int    `json:"firstBlock"`
-	EpochLastBlockNumber  *big.Int    `json:"lastBlock"`
+	EpochBlockHash        common.Hash  `json:"hash"`
+	EpochRound            *types.Round `json:"round,omitempty"`
+	EpochFirstBlockNumber *big.Int     `json:"firstBlock"`
+	EpochLastBlockNumber  *big.Int     `json:"lastBlock"`
+	EpochConsensusVersion string       `json:"consensusVersion"`
 }
 
 type SigLRU = lru.Cache[common.Hash, common.Address]
