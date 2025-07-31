@@ -51,8 +51,10 @@ type Backend interface {
 	BlobBaseFee(ctx context.Context) *big.Int
 	ChainDb() ethdb.Database
 	AccountManager() *accounts.Manager
-	RPCGasCap() uint64    // global gas cap for eth_call over rpc: DoS protection
-	RPCTxFeeCap() float64 // global tx fee cap for all transaction related APIs
+	RPCGasCap() uint64        // global gas cap for eth_call over rpc: DoS protection
+	RPCTxFeeCap() float64     // global tx fee cap for all transaction related APIs
+	UnprotectedAllowed() bool // allows only for EIP155 transactions.
+
 	XDCxService() *XDCx.XDCX
 	LendingService() *XDCxlending.Lending
 
@@ -70,7 +72,7 @@ type Backend interface {
 	GetBlock(ctx context.Context, blockHash common.Hash) (*types.Block, error)
 	PendingBlockAndReceipts() (*types.Block, types.Receipts)
 	GetReceipts(ctx context.Context, blockHash common.Hash) (types.Receipts, error)
-	GetTd(blockHash common.Hash) *big.Int
+	GetTd(ctx context.Context, blockHash common.Hash) *big.Int
 	GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, XDCxState *tradingstate.TradingStateDB, header *types.Header, vmConfig *vm.Config) (*vm.EVM, func() error, error)
 	SubscribeChainEvent(ch chan<- core.ChainEvent) event.Subscription
 	SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription
@@ -93,9 +95,9 @@ type Backend interface {
 	SendLendingTx(ctx context.Context, signedTx *types.LendingTransaction) error
 
 	ChainConfig() *params.ChainConfig
+	Engine() consensus.Engine
 	CurrentBlock() *types.Block
 	GetIPCClient() (bind.ContractBackend, error)
-	GetEngine() consensus.Engine
 	GetRewardByHash(hash common.Hash) map[string]map[string]map[string]*big.Int
 
 	GetVotersRewards(common.Address) map[common.Address]*big.Int
@@ -116,6 +118,7 @@ type Backend interface {
 	SubscribePendingLogsEvent(ch chan<- []*types.Log) event.Subscription
 	BloomStatus() (uint64, uint64)
 	ServiceFilter(ctx context.Context, session *bloombits.MatcherSession)
+	GetPeer() int
 }
 
 func GetAPIs(apiBackend Backend, chainReader consensus.ChainReader) []rpc.API {
@@ -123,48 +126,28 @@ func GetAPIs(apiBackend Backend, chainReader consensus.ChainReader) []rpc.API {
 	return []rpc.API{
 		{
 			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicEthereumAPI(apiBackend),
-			Public:    true,
+			Service:   NewEthereumAPI(apiBackend),
 		}, {
 			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicBlockChainAPI(apiBackend, chainReader),
-			Public:    true,
+			Service:   NewBlockChainAPI(apiBackend, chainReader),
 		}, {
 			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicTransactionPoolAPI(apiBackend, nonceLock),
-			Public:    true,
+			Service:   NewTransactionAPI(apiBackend, nonceLock),
 		}, {
 			Namespace: "XDCx",
-			Version:   "1.0",
 			Service:   NewPublicXDCXTransactionPoolAPI(apiBackend, nonceLock),
-			Public:    true,
 		}, {
 			Namespace: "txpool",
-			Version:   "1.0",
-			Service:   NewPublicTxPoolAPI(apiBackend),
-			Public:    true,
+			Service:   NewTxPoolAPI(apiBackend),
 		}, {
 			Namespace: "debug",
-			Version:   "1.0",
-			Service:   NewPublicDebugAPI(apiBackend),
-			Public:    true,
-		}, {
-			Namespace: "debug",
-			Version:   "1.0",
-			Service:   NewPrivateDebugAPI(apiBackend),
+			Service:   NewDebugAPI(apiBackend),
 		}, {
 			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicAccountAPI(apiBackend.AccountManager()),
-			Public:    true,
+			Service:   NewEthereumAccountAPI(apiBackend.AccountManager()),
 		}, {
 			Namespace: "personal",
-			Version:   "1.0",
-			Service:   NewPrivateAccountAPI(apiBackend, nonceLock),
-			Public:    false,
+			Service:   NewPersonalAccountAPI(apiBackend, nonceLock),
 		},
 	}
 }

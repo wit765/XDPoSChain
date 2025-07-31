@@ -18,6 +18,7 @@ package p2p
 
 import (
 	"crypto/ecdsa"
+	"errors"
 	"math/rand"
 	"net"
 	"reflect"
@@ -128,7 +129,7 @@ func TestServerDial(t *testing.T) {
 		t.Fatalf("could not setup listener: %v", err)
 	}
 	defer listener.Close()
-	accepted := make(chan net.Conn)
+	accepted := make(chan net.Conn, 1)
 	go func() {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -243,7 +244,7 @@ func TestServerTaskScheduling(t *testing.T) {
 		Config:  Config{MaxPeers: 10},
 		quit:    make(chan struct{}),
 		ntab:    fakeTable{},
-		running: true,
+		Running: true,
 		log:     log.New(),
 	}
 	srv.loopWG.Add(1)
@@ -288,7 +289,7 @@ func TestServerManyTasks(t *testing.T) {
 		srv = &Server{
 			quit:    make(chan struct{}),
 			ntab:    fakeTable{},
-			running: true,
+			Running: true,
 			log:     log.New(),
 		}
 		done       = make(chan *testTask)
@@ -563,7 +564,7 @@ func TestServerSetupConn(t *testing.T) {
 		}
 		p1, _ := net.Pipe()
 		srv.SetupConn(p1, test.flags, test.dialDest)
-		if !reflect.DeepEqual(test.tt.closeErr, test.wantCloseErr) {
+		if !errors.Is(test.tt.closeErr, test.wantCloseErr) {
 			t.Errorf("test %d: close error mismatch: got %q, want %q", i, test.tt.closeErr, test.wantCloseErr)
 		}
 		if test.tt.calls != test.wantCalls {

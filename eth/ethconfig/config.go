@@ -45,16 +45,6 @@ var FullNodeGPO = gasprice.Config{
 	IgnorePrice:      gasprice.DefaultIgnorePrice,
 }
 
-// LightClientGPO contains default gasprice oracle settings for light client.
-var LightClientGPO = gasprice.Config{
-	Blocks:           2,
-	Percentile:       60,
-	MaxHeaderHistory: 300,
-	MaxBlockHistory:  5,
-	MaxPrice:         gasprice.DefaultMaxPrice,
-	IgnorePrice:      gasprice.DefaultIgnorePrice,
-}
-
 // Defaults contains default settings for use on the Ethereum main net.
 var Defaults = Config{
 	SyncMode: downloader.FullSync,
@@ -68,7 +58,8 @@ var Defaults = Config{
 	NetworkId:          0, // enable auto configuration of networkID == chainID
 	LightPeers:         100,
 	DatabaseCache:      768,
-	TrieCache:          256,
+	TrieCleanCache:     256,
+	TrieDirtyCache:     256,
 	TrieTimeout:        5 * time.Minute,
 	FilterLogCacheSize: 32,
 	GasPrice:           big.NewInt(0.25 * params.Shannon),
@@ -112,7 +103,9 @@ type Config struct {
 	// zero, the chain ID is used as network ID.
 	NetworkId uint64
 	SyncMode  downloader.SyncMode
-	NoPruning bool
+
+	NoPruning  bool // Whether to disable pruning and flush everything to disk
+	NoPrefetch bool // Whether to disable prefetching and only load state on demand
 
 	// Light client options
 	LightServ  int `toml:",omitempty"` // Maximum percentage of time allowed for serving LES requests
@@ -122,8 +115,10 @@ type Config struct {
 	SkipBcVersionCheck bool `toml:"-"`
 	DatabaseHandles    int  `toml:"-"`
 	DatabaseCache      int
-	TrieCache          int
+	TrieCleanCache     int
+	TrieDirtyCache     int
 	TrieTimeout        time.Duration
+	Preimages          bool
 
 	// This is the number of blocks for which logs will be cached in the filter system.
 	FilterLogCacheSize int
@@ -145,9 +140,6 @@ type Config struct {
 
 	// Enables tracking of SHA3 preimages in the VM
 	EnablePreimageRecording bool
-
-	// Miscellaneous options
-	DocRoot string `toml:"-"`
 
 	// RPCGasCap is the global gas cap for eth-call variants.
 	RPCGasCap uint64

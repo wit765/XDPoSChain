@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -41,13 +42,7 @@ var (
 		Name:      "init",
 		Usage:     "Bootstrap and initialize a new genesis block",
 		ArgsUsage: "<genesisPath>",
-		Flags: []cli.Flag{
-			utils.DataDirFlag,
-			utils.XDCXDataDirFlag,
-			utils.MainnetFlag,
-			utils.TestnetFlag,
-			utils.DevnetFlag,
-		},
+		Flags:     slices.Concat(utils.NetworkFlags, utils.DatabaseFlags),
 		Description: `
 The init command initializes a new genesis block and definition for the network.
 This is a destructive action and changes the network in which you will be
@@ -60,9 +55,7 @@ It expects the genesis file or the network name [ mainnet | testnet | devnet ] a
 		Name:      "import",
 		Usage:     "Import a blockchain file",
 		ArgsUsage: "<filename> (<filename 2> ... <filename N>) ",
-		Flags: []cli.Flag{
-			utils.DataDirFlag,
-			utils.XDCXDataDirFlag,
+		Flags: slices.Concat([]cli.Flag{
 			utils.CacheFlag,
 			utils.SyncModeFlag,
 			utils.GCModeFlag,
@@ -80,7 +73,7 @@ It expects the genesis file or the network name [ mainnet | testnet | devnet ] a
 			utils.MetricsInfluxDBTokenFlag,
 			utils.MetricsInfluxDBBucketFlag,
 			utils.MetricsInfluxDBOrganizationFlag,
-		},
+		}, utils.DatabaseFlags),
 		Description: `
 The import command imports blocks from an RLP-encoded form. The form can be one file
 with several RLP-encoded blocks, or several files can be used.
@@ -93,12 +86,10 @@ processing will proceed even if an individual RLP-file import failure occurs.`,
 		Name:      "export",
 		Usage:     "Export blockchain into file",
 		ArgsUsage: "<filename> [<blockNumFirst> <blockNumLast>]",
-		Flags: []cli.Flag{
-			utils.DataDirFlag,
-			utils.XDCXDataDirFlag,
+		Flags: slices.Concat([]cli.Flag{
 			utils.CacheFlag,
 			utils.SyncModeFlag,
-		},
+		}, utils.DatabaseFlags),
 		Description: `
 Requires a first argument of the file to write to.
 Optional second and third arguments control the first and
@@ -110,12 +101,10 @@ if already existing.`,
 		Name:      "import-preimages",
 		Usage:     "Import the preimage database from an RLP stream",
 		ArgsUsage: "<datafile>",
-		Flags: []cli.Flag{
-			utils.DataDirFlag,
-			utils.XDCXDataDirFlag,
+		Flags: slices.Concat([]cli.Flag{
 			utils.CacheFlag,
 			utils.SyncModeFlag,
-		},
+		}, utils.DatabaseFlags),
 		Category: "BLOCKCHAIN COMMANDS",
 		Description: `
 	The import-preimages command imports hash preimages from an RLP encoded stream.`,
@@ -125,12 +114,10 @@ if already existing.`,
 		Name:      "export-preimages",
 		Usage:     "Export the preimage database into an RLP stream",
 		ArgsUsage: "<dumpfile>",
-		Flags: []cli.Flag{
-			utils.DataDirFlag,
-			utils.XDCXDataDirFlag,
+		Flags: slices.Concat([]cli.Flag{
 			utils.CacheFlag,
 			utils.SyncModeFlag,
-		},
+		}, utils.DatabaseFlags),
 		Description: `
 The export-preimages command export hash preimages to an RLP encoded stream`,
 	}
@@ -139,12 +126,10 @@ The export-preimages command export hash preimages to an RLP encoded stream`,
 		Name:      "dump",
 		Usage:     "Dump a specific block from storage",
 		ArgsUsage: "[<blockHash> | <blockNum>]...",
-		Flags: []cli.Flag{
-			utils.DataDirFlag,
-			utils.XDCXDataDirFlag,
+		Flags: slices.Concat([]cli.Flag{
 			utils.CacheFlag,
 			utils.SyncModeFlag,
-		},
+		}, utils.DatabaseFlags),
 		Category: "BLOCKCHAIN COMMANDS",
 		Description: `
 The arguments are interpreted as block numbers or hashes.
@@ -155,69 +140,54 @@ Use "ethereum dump 0" to dump the genesis block.`,
 // initGenesis will initialise the given JSON format genesis file and writes it as
 // the zero'd block (i.e. genesis) or will fail hard if it can't succeed.
 func initGenesis(ctx *cli.Context) error {
-	utils.CheckExclusive(ctx, utils.MainnetFlag, utils.TestnetFlag, utils.DevnetFlag)
+	if ctx.Args().Len() != 1 {
+		utils.Fatalf("need the genesis.json file or the network name [ mainnet | testnet | devnet ] as the only argument")
+	}
 
 	var err error
 	genesis := new(core.Genesis)
-	if ctx.Bool(utils.MainnetFlag.Name) {
-		if ctx.Args().Len() > 0 {
-			utils.Fatalf("The mainnet flag and genesis file can't be used at the same time")
-		}
-		err = json.Unmarshal(xdc_genesis.TestnetGenesis, &genesis)
-	} else if ctx.Bool(utils.TestnetFlag.Name) {
-		if ctx.Args().Len() > 0 {
-			utils.Fatalf("The testnet flag and genesis file can't be used at the same time")
-		}
-		err = json.Unmarshal(xdc_genesis.TestnetGenesis, &genesis)
-	} else if ctx.Bool(utils.DevnetFlag.Name) {
-		if ctx.Args().Len() > 0 {
-			utils.Fatalf("The devnet flag and genesis file can't be used at the same time")
-		}
-		err = json.Unmarshal(xdc_genesis.TestnetGenesis, &genesis)
+	genesisPath := ctx.Args().First()
+	if genesisPath == "mainnet" || genesisPath == "xinfin" {
+		err = json.Unmarshal(xdc_genesis.MainnetGenesis, genesis)
+	} else if genesisPath == "testnet" || genesisPath == "apothem" {
+		err = json.Unmarshal(xdc_genesis.TestnetGenesis, genesis)
+	} else if genesisPath == "devnet" {
+		err = json.Unmarshal(xdc_genesis.DevnetGenesis, genesis)
 	} else {
-		if ctx.Args().Len() != 1 {
-			utils.Fatalf("need the genesis.json file or the network name [ mainnet | testnet | devnet ] as the only argument")
+		if len(genesisPath) == 0 {
+			utils.Fatalf("invalid path to genesis file")
 		}
-		genesisPath := ctx.Args().First()
-		if genesisPath == "mainnet" || genesisPath == "xinfin" {
-			err = json.Unmarshal(xdc_genesis.MainnetGenesis, &genesis)
-		} else if genesisPath == "testnet" || genesisPath == "apothem" {
-			err = json.Unmarshal(xdc_genesis.TestnetGenesis, &genesis)
-		} else if genesisPath == "devnet" {
-			err = json.Unmarshal(xdc_genesis.DevnetGenesis, &genesis)
-		} else {
-			if len(genesisPath) == 0 {
-				utils.Fatalf("invalid path to genesis file")
-			}
-			var file *os.File
-			file, err = os.Open(genesisPath)
-			if err != nil {
-				utils.Fatalf("Failed to read genesis file: %v", err)
-			}
-			defer file.Close()
-			err = json.NewDecoder(file).Decode(genesis)
+		var file *os.File
+		file, err = os.Open(genesisPath)
+		if err != nil {
+			utils.Fatalf("Failed to read genesis file: %v", err)
 		}
+		defer file.Close()
+		err = json.NewDecoder(file).Decode(genesis)
 	}
 	if err != nil {
 		utils.Fatalf("invalid genesis json: %v", err)
 	}
 
+	if genesis.Config.ChainId != nil {
+		common.CopyConstants(genesis.Config.ChainId.Uint64())
+	}
+
 	// Open an initialise both full and light databases
-	stack, _ := makeFullNode(ctx)
+	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
 
-	for _, name := range []string{"chaindata", "lightchaindata"} {
-		chaindb, err := stack.OpenDatabase(name, 0, 0, "", false)
-		if err != nil {
-			utils.Fatalf("Failed to open database: %v", err)
-		}
-		_, hash, err := core.SetupGenesisBlock(chaindb, genesis)
-		if err != nil {
-			utils.Fatalf("Failed to write genesis block: %v", err)
-		}
-		chaindb.Close()
-		log.Info("Successfully wrote genesis state", "database", name, "hash", hash)
+	name := "chaindata"
+	chaindb, err := stack.OpenDatabase(name, 0, 0, "", false)
+	if err != nil {
+		utils.Fatalf("Failed to open database: %v", err)
 	}
+	_, hash, err := core.SetupGenesisBlock(chaindb, genesis)
+	if err != nil {
+		utils.Fatalf("Failed to write genesis block: %v", err)
+	}
+	chaindb.Close()
+	log.Info("Successfully wrote genesis state", "database", name, "hash", hash.String())
 	return nil
 }
 
@@ -225,7 +195,7 @@ func importChain(ctx *cli.Context) error {
 	if ctx.Args().Len() < 1 {
 		utils.Fatalf("This command requires an argument.")
 	}
-	stack, cfg := makeFullNode(ctx)
+	stack, _, cfg := makeFullNode(ctx)
 	defer stack.Close()
 
 	// Start metrics export if enabled
@@ -303,7 +273,7 @@ func exportChain(ctx *cli.Context) error {
 		utils.Fatalf("This command requires an argument.")
 	}
 
-	stack, _ := makeFullNode(ctx)
+	stack, _, _ := makeFullNode(ctx)
 	defer stack.Close()
 
 	chain, db := utils.MakeChain(ctx, stack, true)
@@ -340,7 +310,7 @@ func importPreimages(ctx *cli.Context) error {
 		utils.Fatalf("This command requires an argument.")
 	}
 
-	stack, _ := makeFullNode(ctx)
+	stack, _, _ := makeFullNode(ctx)
 	defer stack.Close()
 
 	db := utils.MakeChainDatabase(ctx, stack, false)
@@ -359,7 +329,7 @@ func exportPreimages(ctx *cli.Context) error {
 	if ctx.Args().Len() < 1 {
 		utils.Fatalf("This command requires an argument.")
 	}
-	stack, _ := makeFullNode(ctx)
+	stack, _, _ := makeFullNode(ctx)
 	defer stack.Close()
 
 	db := utils.MakeChainDatabase(ctx, stack, true)
@@ -374,7 +344,7 @@ func exportPreimages(ctx *cli.Context) error {
 }
 
 func dump(ctx *cli.Context) error {
-	stack, _ := makeFullNode(ctx)
+	stack, _, _ := makeFullNode(ctx)
 	defer stack.Close()
 
 	chain, chainDb := utils.MakeChain(ctx, stack, true)

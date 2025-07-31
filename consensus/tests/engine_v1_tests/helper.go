@@ -25,7 +25,7 @@ import (
 	"github.com/XinFinOrg/XDPoSChain/crypto"
 	"github.com/XinFinOrg/XDPoSChain/log"
 	"github.com/XinFinOrg/XDPoSChain/params"
-	"github.com/XinFinOrg/XDPoSChain/rlp"
+	"github.com/XinFinOrg/XDPoSChain/trie"
 )
 
 type masterNodes map[string]big.Int
@@ -127,14 +127,7 @@ func getCommonBackend(t *testing.T, chainConfig *params.ChainConfig) *backends.S
 	code, _ := contractBackendForSC.CodeAt(ctx, validatorSCAddr, nil)
 	storage := make(map[common.Hash]common.Hash)
 	f := func(key, val common.Hash) bool {
-		decode := []byte{}
-		trim := bytes.TrimLeft(val.Bytes(), "\x00")
-		err := rlp.DecodeBytes(trim, &decode)
-		if err != nil {
-			t.Fatalf("Failed while decode byte")
-		}
-		storage[key] = common.BytesToHash(decode)
-		log.Info("DecodeBytes", "value", val.String(), "decode", storage[key].String())
+		storage[key] = val
 		return true
 	}
 	err = contractBackendForSC.ForEachStorageAt(ctx, validatorSCAddr, nil, f)
@@ -390,7 +383,7 @@ func createBlockFromHeader(bc *core.BlockChain, customHeader *types.Header, txs 
 		}
 
 		header.GasUsed = *gasUsed
-		block = types.NewBlock(&header, txs, nil, receipts)
+		block = types.NewBlock(&header, txs, nil, receipts, trie.NewStackTrie(nil))
 	}
 
 	return block, nil

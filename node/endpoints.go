@@ -17,50 +17,11 @@
 package node
 
 import (
-	"net"
-	"net/http"
 	"time"
 
 	"github.com/XinFinOrg/XDPoSChain/log"
 	"github.com/XinFinOrg/XDPoSChain/rpc"
 )
-
-// StartHTTPEndpoint starts the HTTP RPC endpoint.
-func StartHTTPEndpoint(endpoint string, timeouts rpc.HTTPTimeouts, handler http.Handler) (*http.Server, net.Addr, error) {
-	// start the HTTP listener
-	var (
-		listener net.Listener
-		err      error
-	)
-	if listener, err = net.Listen("tcp", endpoint); err != nil {
-		return nil, nil, err
-	}
-	// Bundle and start the HTTP server
-	httpSrv := &http.Server{
-		Handler:      handler,
-		ReadTimeout:  timeouts.ReadTimeout,
-		WriteTimeout: timeouts.WriteTimeout,
-		IdleTimeout:  timeouts.IdleTimeout,
-	}
-	log.Info("StartHTTPEndpoint", "ReadTimeout", timeouts.ReadTimeout, "WriteTimeout", timeouts.WriteTimeout, "IdleTimeout", timeouts.IdleTimeout)
-	go httpSrv.Serve(listener)
-	return httpSrv, listener.Addr(), err
-}
-
-// startWSEndpoint starts a websocket endpoint.
-func startWSEndpoint(endpoint string, handler http.Handler) (*http.Server, net.Addr, error) {
-	// start the HTTP listener
-	var (
-		listener net.Listener
-		err      error
-	)
-	if listener, err = net.Listen("tcp", endpoint); err != nil {
-		return nil, nil, err
-	}
-	wsSrv := &http.Server{Handler: handler}
-	go wsSrv.Serve(listener)
-	return wsSrv, listener.Addr(), err
-}
 
 // checkModuleAvailability checks that all names given in modules are actually
 // available API services. It assumes that the MetadataApi module ("rpc") is always available;
@@ -74,8 +35,10 @@ func checkModuleAvailability(modules []string, apis []rpc.API) (bad, available [
 		}
 	}
 	for _, name := range modules {
-		if _, ok := availableSet[name]; !ok && name != rpc.MetadataApi {
-			bad = append(bad, name)
+		if _, ok := availableSet[name]; !ok {
+			if name != rpc.MetadataApi && name != rpc.EngineApi {
+				bad = append(bad, name)
+			}
 		}
 	}
 	return bad, available
@@ -86,6 +49,10 @@ func CheckTimeouts(timeouts *rpc.HTTPTimeouts) {
 	if timeouts.ReadTimeout < time.Second {
 		log.Warn("Sanitizing invalid HTTP read timeout", "provided", timeouts.ReadTimeout, "updated", rpc.DefaultHTTPTimeouts.ReadTimeout)
 		timeouts.ReadTimeout = rpc.DefaultHTTPTimeouts.ReadTimeout
+	}
+	if timeouts.ReadHeaderTimeout < time.Second {
+		log.Warn("Sanitizing invalid HTTP read header timeout", "provided", timeouts.ReadHeaderTimeout, "updated", rpc.DefaultHTTPTimeouts.ReadHeaderTimeout)
+		timeouts.ReadHeaderTimeout = rpc.DefaultHTTPTimeouts.ReadHeaderTimeout
 	}
 	if timeouts.WriteTimeout < time.Second {
 		log.Warn("Sanitizing invalid HTTP write timeout", "provided", timeouts.WriteTimeout, "updated", rpc.DefaultHTTPTimeouts.WriteTimeout)

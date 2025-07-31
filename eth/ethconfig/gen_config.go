@@ -29,8 +29,10 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		SkipBcVersionCheck      bool `toml:"-"`
 		DatabaseHandles         int  `toml:"-"`
 		DatabaseCache           int
-		TrieCache               int
+		TrieCleanCache          int
+		TrieDirtyCache          int
 		TrieTimeout             time.Duration
+		Preimages               bool
 		FilterLogCacheSize      int
 		Etherbase               common.Address `toml:",omitempty"`
 		MinerThreads            int            `toml:",omitempty"`
@@ -40,7 +42,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		TxPool                  txpool.Config
 		GPO                     gasprice.Config
 		EnablePreimageRecording bool
-		DocRoot                 string `toml:"-"`
 		RPCGasCap               uint64
 		RPCTxFeeCap             float64
 	}
@@ -54,8 +55,10 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.SkipBcVersionCheck = c.SkipBcVersionCheck
 	enc.DatabaseHandles = c.DatabaseHandles
 	enc.DatabaseCache = c.DatabaseCache
-	enc.TrieCache = c.TrieCache
+	enc.TrieCleanCache = c.TrieCleanCache
+	enc.TrieDirtyCache = c.TrieDirtyCache
 	enc.TrieTimeout = c.TrieTimeout
+	enc.Preimages = c.Preimages
 	enc.FilterLogCacheSize = c.FilterLogCacheSize
 	enc.Etherbase = c.Etherbase
 	enc.MinerThreads = c.MinerThreads
@@ -65,7 +68,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.TxPool = c.TxPool
 	enc.GPO = c.GPO
 	enc.EnablePreimageRecording = c.EnablePreimageRecording
-	enc.DocRoot = c.DocRoot
 	enc.RPCGasCap = c.RPCGasCap
 	enc.RPCTxFeeCap = c.RPCTxFeeCap
 	return &enc, nil
@@ -83,8 +85,10 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		SkipBcVersionCheck      *bool `toml:"-"`
 		DatabaseHandles         *int  `toml:"-"`
 		DatabaseCache           *int
-		TrieCache               *int
+		TrieCleanCache          *int
+		TrieDirtyCache          *int
 		TrieTimeout             *time.Duration
+		Preimages               *bool
 		FilterLogCacheSize      *int
 		Etherbase               *common.Address `toml:",omitempty"`
 		MinerThreads            *int            `toml:",omitempty"`
@@ -94,7 +98,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		TxPool                  *txpool.Config
 		GPO                     *gasprice.Config
 		EnablePreimageRecording *bool
-		DocRoot                 *string `toml:"-"`
 		RPCGasCap               *uint64
 		RPCTxFeeCap             *float64
 	}
@@ -129,11 +132,17 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	if dec.DatabaseCache != nil {
 		c.DatabaseCache = *dec.DatabaseCache
 	}
-	if dec.TrieCache != nil {
-		c.TrieCache = *dec.TrieCache
+	if dec.TrieCleanCache != nil {
+		c.TrieCleanCache = *dec.TrieCleanCache
+	}
+	if dec.TrieDirtyCache != nil {
+		c.TrieDirtyCache = *dec.TrieDirtyCache
 	}
 	if dec.TrieTimeout != nil {
 		c.TrieTimeout = *dec.TrieTimeout
+	}
+	if dec.Preimages != nil {
+		c.Preimages = *dec.Preimages
 	}
 	if dec.FilterLogCacheSize != nil {
 		c.FilterLogCacheSize = *dec.FilterLogCacheSize
@@ -161,9 +170,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.EnablePreimageRecording != nil {
 		c.EnablePreimageRecording = *dec.EnablePreimageRecording
-	}
-	if dec.DocRoot != nil {
-		c.DocRoot = *dec.DocRoot
 	}
 	if dec.RPCGasCap != nil {
 		c.RPCGasCap = *dec.RPCGasCap

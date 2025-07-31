@@ -18,6 +18,7 @@ package core
 
 import (
 	"math/big"
+	"sync/atomic"
 
 	"github.com/XinFinOrg/XDPoSChain/XDCx/tradingstate"
 	"github.com/XinFinOrg/XDPoSChain/XDCxlending/lendingstate"
@@ -30,27 +31,33 @@ import (
 // Validator is an interface which defines the standard for block validation. It
 // is only responsible for validating block contents, as the header validation is
 // done by the specific consensus engines.
-//
 type Validator interface {
 	// ValidateBody validates the given block's content.
 	ValidateBody(block *types.Block) error
 
 	// ValidateState validates the given statedb and optionally the receipts and
 	// gas used.
-	ValidateState(block, parent *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64) error
+	ValidateState(block *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64) error
 
 	ValidateTradingOrder(statedb *state.StateDB, XDCxStatedb *tradingstate.TradingStateDB, txMatchBatch tradingstate.TxMatchBatch, coinbase common.Address, header *types.Header) error
 
 	ValidateLendingOrder(statedb *state.StateDB, lendingStateDb *lendingstate.LendingStateDB, XDCxStatedb *tradingstate.TradingStateDB, batch lendingstate.TxLendingBatch, coinbase common.Address, header *types.Header) error
 }
 
+// Prefetcher is an interface for pre-caching transaction signatures and state.
+type Prefetcher interface {
+	// Prefetch processes the state changes according to the Ethereum rules by running
+	// the transaction messages using the statedb, but any changes are discarded. The
+	// only goal is to pre-cache transaction signatures and state trie nodes.
+	Prefetch(block *types.Block, statedb *state.StateDB, cfg vm.Config, interrupt *atomic.Bool)
+}
+
 // Processor is an interface for processing blocks using a given initial state.
-//
-// Process takes the block to be processed and the statedb upon which the
-// initial state is based. It should return the receipts generated, amount
-// of gas used in the process and return an error if any of the internal rules
-// failed.
 type Processor interface {
+	// Process processes the state changes according to the Ethereum rules by running
+	// the transaction messages using the statedb and applying any rewards to both
+	// the processor (coinbase) and any included uncles.
 	Process(block *types.Block, statedb *state.StateDB, tradingState *tradingstate.TradingStateDB, cfg vm.Config, balanceFee map[common.Address]*big.Int) (types.Receipts, []*types.Log, uint64, error)
+
 	ProcessBlockNoValidator(block *CalculatedBlock, statedb *state.StateDB, tradingState *tradingstate.TradingStateDB, cfg vm.Config, balanceFee map[common.Address]*big.Int) (types.Receipts, []*types.Log, uint64, error)
 }

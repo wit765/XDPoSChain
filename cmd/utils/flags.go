@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/XinFinOrg/XDPoSChain/XDCx"
+	"github.com/XinFinOrg/XDPoSChain/XDCxlending"
 	"github.com/XinFinOrg/XDPoSChain/accounts"
 	"github.com/XinFinOrg/XDPoSChain/accounts/keystore"
 	"github.com/XinFinOrg/XDPoSChain/common"
@@ -43,11 +44,13 @@ import (
 	"github.com/XinFinOrg/XDPoSChain/core/txpool"
 	"github.com/XinFinOrg/XDPoSChain/core/vm"
 	"github.com/XinFinOrg/XDPoSChain/crypto"
+	"github.com/XinFinOrg/XDPoSChain/eth"
 	"github.com/XinFinOrg/XDPoSChain/eth/downloader"
 	"github.com/XinFinOrg/XDPoSChain/eth/ethconfig"
 	"github.com/XinFinOrg/XDPoSChain/eth/filters"
 	"github.com/XinFinOrg/XDPoSChain/eth/gasprice"
 	"github.com/XinFinOrg/XDPoSChain/ethdb"
+	"github.com/XinFinOrg/XDPoSChain/ethstats"
 	"github.com/XinFinOrg/XDPoSChain/internal/ethapi"
 	"github.com/XinFinOrg/XDPoSChain/internal/flags"
 	"github.com/XinFinOrg/XDPoSChain/log"
@@ -139,16 +142,10 @@ var (
 		Usage:    "Custom node name",
 		Category: flags.NetworkingCategory,
 	}
-	DocRootFlag = &flags.DirectoryFlag{
-		Name:     "docroot",
-		Usage:    "Document Root for HTTPClient file scheme",
-		Value:    flags.DirectoryString(flags.HomeDir()),
-		Category: flags.APICategory,
-	}
 
 	SyncModeFlag = &cli.StringFlag{
 		Name:     "syncmode",
-		Usage:    `Blockchain sync mode ("fast", "full", or "light")`,
+		Usage:    `Blockchain sync mode ("fast" or "full")`,
 		Value:    ethconfig.Defaults.SyncMode.String(),
 		Category: flags.EthCategory,
 	}
@@ -162,22 +159,6 @@ var (
 		Name:     "lightkdf",
 		Usage:    "Reduce key-derivation RAM & CPU usage at some expense of KDF strength",
 		Category: flags.AccountCategory,
-	}
-
-	// Light server and client settings
-	LightServFlag = &cli.IntFlag{
-		Name:     "light-serv",
-		Aliases:  []string{"lightserv"},
-		Usage:    "Maximum percentage of time allowed for serving LES requests (0-90)",
-		Value:    ethconfig.Defaults.LightServ,
-		Category: flags.LightCategory,
-	}
-	LightPeersFlag = &cli.IntFlag{
-		Name:     "light-peers",
-		Aliases:  []string{"lightpeers"},
-		Usage:    "Maximum number of LES client peers",
-		Value:    ethconfig.Defaults.LightPeers,
-		Category: flags.LightCategory,
 	}
 
 	// Ethash settings
@@ -308,11 +289,29 @@ var (
 		Value:    50,
 		Category: flags.PerfCategory,
 	}
+	CacheTrieFlag = &cli.IntFlag{
+		Name:     "cache-trie",
+		Aliases:  []string{"cache.trie"},
+		Usage:    "Percentage of cache memory allowance to use for trie caching (default = 15% full mode, 30% archive mode)",
+		Value:    15,
+		Category: flags.PerfCategory,
+	}
 	CacheGCFlag = &cli.IntFlag{
 		Name:     "cache-gc",
 		Aliases:  []string{"cache.gc"},
 		Usage:    "Percentage of cache memory allowance to use for trie pruning (default = 25% full mode, 0% archive mode)",
 		Value:    25,
+		Category: flags.PerfCategory,
+	}
+	CachePrefetchFlag = &cli.BoolFlag{
+		Name:     "cache-prefetch",
+		Usage:    "Enable heuristic state prefetch during block import",
+		Category: flags.PerfCategory,
+	}
+	CachePreimagesFlag = &cli.BoolFlag{
+		Name:     "cache-preimages",
+		Usage:    "Enable recording the SHA3/keccak preimages of trie keys (default: true)",
+		Value:    true,
 		Category: flags.PerfCategory,
 	}
 	CacheLogSizeFlag = &cli.IntFlag{
@@ -405,6 +404,30 @@ var (
 		Value:    ethconfig.Defaults.RPCTxFeeCap,
 		Category: flags.APICategory,
 	}
+	// Authenticated RPC HTTP settings
+	AuthListenFlag = &cli.StringFlag{
+		Name:     "authrpc-addr",
+		Usage:    "Listening address for authenticated APIs",
+		Value:    node.DefaultConfig.AuthAddr,
+		Category: flags.APICategory,
+	}
+	AuthPortFlag = &cli.IntFlag{
+		Name:     "authrpc-port",
+		Usage:    "Listening port for authenticated APIs",
+		Value:    node.DefaultConfig.AuthPort,
+		Category: flags.APICategory,
+	}
+	AuthVirtualHostsFlag = &cli.StringFlag{
+		Name:     "authrpc-vhosts",
+		Usage:    "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.",
+		Value:    strings.Join(node.DefaultConfig.AuthVirtualHosts, ","),
+		Category: flags.APICategory,
+	}
+	JWTSecretFlag = &cli.StringFlag{
+		Name:     "authrpc-jwtsecret",
+		Usage:    "Path to a JWT secret to use for authenticated RPC endpoints",
+		Category: flags.APICategory,
+	}
 
 	// Logging and debug settings
 	EthStatsURLFlag = &cli.StringFlag{
@@ -473,7 +496,13 @@ var (
 		Name:     "http-api",
 		Aliases:  []string{"rpcapi"},
 		Usage:    "API's offered over the HTTP-RPC interface",
-		Value:    "debug,eth,net,personal,txpool,web3,XDPoS",
+		Value:    "debug,eth,net,txpool,web3,XDPoS",
+		Category: flags.APICategory,
+	}
+	HTTPPathPrefixFlag = &cli.StringFlag{
+		Name:     "http-rpcprefix",
+		Usage:    "HTTP path path prefix on which JSON-RPC is served. Use '/' to serve on all paths.",
+		Value:    "",
 		Category: flags.APICategory,
 	}
 	HTTPReadTimeoutFlag = &cli.DurationFlag{
@@ -481,6 +510,12 @@ var (
 		Aliases:  []string{"rpcreadtimeout"},
 		Usage:    "HTTP-RPC server read timeout",
 		Value:    rpc.DefaultHTTPTimeouts.ReadTimeout,
+		Category: flags.APICategory,
+	}
+	HTTPReadHeaderTimeoutFlag = &cli.DurationFlag{
+		Name:     "http-readheadertimeout",
+		Usage:    "HTTP-RPC server read timeout",
+		Value:    rpc.DefaultHTTPTimeouts.ReadHeaderTimeout,
 		Category: flags.APICategory,
 	}
 	HTTPWriteTimeoutFlag = &cli.DurationFlag{
@@ -521,7 +556,7 @@ var (
 		Name:     "ws-api",
 		Aliases:  []string{"wsapi"},
 		Usage:    "API's offered over the WS-RPC interface",
-		Value:    "debug,eth,net,personal,txpool,web3,XDPoS",
+		Value:    "debug,eth,net,txpool,web3,XDPoS",
 		Category: flags.APICategory,
 	}
 	WSAllowedOriginsFlag = &cli.StringFlag{
@@ -529,6 +564,12 @@ var (
 		Aliases:  []string{"wsorigins"},
 		Usage:    "Origins from which to accept websockets requests",
 		Value:    "*",
+		Category: flags.APICategory,
+	}
+	WSPathPrefixFlag = &cli.StringFlag{
+		Name:     "ws-rpcprefix",
+		Usage:    "HTTP path prefix on which JSON-RPC is served. Use '/' to serve on all paths.",
+		Value:    "",
 		Category: flags.APICategory,
 	}
 	ExecFlag = &cli.StringFlag{
@@ -539,6 +580,28 @@ var (
 	PreloadJSFlag = &cli.StringFlag{
 		Name:     "preload",
 		Usage:    "Comma separated list of JavaScript files to preload into the console",
+		Category: flags.APICategory,
+	}
+	AllowUnprotectedTxs = &cli.BoolFlag{
+		Name:     "rpc-allow-unprotected-txs",
+		Usage:    "Allow for unprotected (non EIP155 signed) transactions to be submitted via RPC",
+		Category: flags.APICategory,
+	}
+	EnablePersonal = &cli.BoolFlag{
+		Name:     "rpc.enabledeprecatedpersonal",
+		Usage:    "Enables the (deprecated) personal namespace",
+		Category: flags.APICategory,
+	}
+	BatchRequestLimit = &cli.IntFlag{
+		Name:     "rpc-batch-request-limit",
+		Usage:    "Maximum number of requests in a batch",
+		Value:    node.DefaultConfig.BatchRequestLimit,
+		Category: flags.APICategory,
+	}
+	BatchResponseMaxSize = &cli.IntFlag{
+		Name:     "rpc-batch-response-max-size",
+		Usage:    "Maximum number of bytes returned from a batched call",
+		Value:    node.DefaultConfig.BatchResponseMaxSize,
 		Category: flags.APICategory,
 	}
 
@@ -738,10 +801,10 @@ var (
 	}
 
 	// MISC settings
-	RollbackFlag = &cli.StringFlag{
-		Name:     "rollback",
-		Usage:    "Rollback chain at hash",
-		Value:    "",
+	SetHeadFlag = &cli.Uint64Flag{
+		Name:     "set-head",
+		Usage:    "Rollback chain to block number",
+		Value:    0,
 		Category: flags.MiscCategory,
 	}
 	AnnounceTxsFlag = &cli.BoolFlag{
@@ -754,12 +817,6 @@ var (
 		Name:     "store-reward",
 		Usage:    "Store reward to file",
 		Value:    false,
-		Category: flags.MiscCategory,
-	}
-	RewoundFlag = &cli.IntFlag{
-		Name:     "rewound",
-		Usage:    "Rewound blocks",
-		Value:    0,
 		Category: flags.MiscCategory,
 	}
 
@@ -814,6 +871,21 @@ var (
 		Aliases:  []string{"XDCx.dbReplicaSetName"},
 		Usage:    "ReplicaSetName if Master-Slave is setup",
 		Category: flags.XdcxCategory,
+	}
+)
+
+var (
+	// NetworkFlags is the flag group of all built-in supported networks.
+	NetworkFlags = []cli.Flag{
+		MainnetFlag,
+		TestnetFlag,
+		DevnetFlag,
+	}
+
+	// DatabaseFlags is the flag group of all database flags.
+	DatabaseFlags = []cli.Flag{
+		DataDirFlag,
+		XDCXDataDirFlag,
 	}
 )
 
@@ -885,11 +957,10 @@ func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
 		if cfg.BootstrapNodes != nil {
 			return // Already set by config file, don't apply defaults.
 		}
-		networkID := ctx.Uint64(NetworkIdFlag.Name)
 		switch {
-		case ctx.Bool(TestnetFlag.Name) || networkID == 51:
+		case ctx.Bool(TestnetFlag.Name):
 			urls = params.TestnetBootnodes
-		case ctx.Bool(DevnetFlag.Name) || networkID == 551:
+		case ctx.Bool(DevnetFlag.Name):
 			urls = params.DevnetBootnodes
 		}
 	}
@@ -986,8 +1057,29 @@ func setHTTP(ctx *cli.Context, cfg *node.Config) {
 	if ctx.IsSet(HTTPPortFlag.Name) {
 		cfg.HTTPPort = ctx.Int(HTTPPortFlag.Name)
 	}
+
+	if ctx.IsSet(AuthListenFlag.Name) {
+		cfg.AuthAddr = ctx.String(AuthListenFlag.Name)
+	}
+	if ctx.IsSet(AuthPortFlag.Name) {
+		cfg.AuthPort = ctx.Int(AuthPortFlag.Name)
+	}
+	if ctx.IsSet(AuthVirtualHostsFlag.Name) {
+		cfg.AuthVirtualHosts = SplitAndTrim(ctx.String(AuthVirtualHostsFlag.Name))
+	}
+
+	cfg.HTTPCors = SplitAndTrim(ctx.String(HTTPCORSDomainFlag.Name))
+	cfg.HTTPModules = SplitAndTrim(ctx.String(HTTPApiFlag.Name))
+	cfg.HTTPVirtualHosts = SplitAndTrim(ctx.String(HTTPVirtualHostsFlag.Name))
+
+	if ctx.IsSet(HTTPPathPrefixFlag.Name) {
+		cfg.HTTPPathPrefix = ctx.String(HTTPPathPrefixFlag.Name)
+	}
 	if ctx.IsSet(HTTPReadTimeoutFlag.Name) {
 		cfg.HTTPTimeouts.ReadTimeout = ctx.Duration(HTTPReadTimeoutFlag.Name)
+	}
+	if ctx.IsSet(HTTPReadHeaderTimeoutFlag.Name) {
+		cfg.HTTPTimeouts.ReadHeaderTimeout = ctx.Duration(HTTPReadHeaderTimeoutFlag.Name)
 	}
 	if ctx.IsSet(HTTPWriteTimeoutFlag.Name) {
 		cfg.HTTPTimeouts.WriteTimeout = ctx.Duration(HTTPWriteTimeoutFlag.Name)
@@ -995,9 +1087,17 @@ func setHTTP(ctx *cli.Context, cfg *node.Config) {
 	if ctx.IsSet(HTTPIdleTimeoutFlag.Name) {
 		cfg.HTTPTimeouts.IdleTimeout = ctx.Duration(HTTPIdleTimeoutFlag.Name)
 	}
-	cfg.HTTPCors = SplitAndTrim(ctx.String(HTTPCORSDomainFlag.Name))
-	cfg.HTTPModules = SplitAndTrim(ctx.String(HTTPApiFlag.Name))
-	cfg.HTTPVirtualHosts = SplitAndTrim(ctx.String(HTTPVirtualHostsFlag.Name))
+
+	if ctx.IsSet(AllowUnprotectedTxs.Name) {
+		cfg.AllowUnprotectedTxs = ctx.Bool(AllowUnprotectedTxs.Name)
+	}
+
+	if ctx.IsSet(BatchRequestLimit.Name) {
+		cfg.BatchRequestLimit = ctx.Int(BatchRequestLimit.Name)
+	}
+	if ctx.IsSet(BatchResponseMaxSize.Name) {
+		cfg.BatchResponseMaxSize = ctx.Int(BatchResponseMaxSize.Name)
+	}
 }
 
 // setWS creates the WebSocket RPC listener interface string from the set
@@ -1012,6 +1112,9 @@ func setWS(ctx *cli.Context, cfg *node.Config) {
 
 	if ctx.IsSet(WSPortFlag.Name) {
 		cfg.WSPort = ctx.Int(WSPortFlag.Name)
+	}
+	if ctx.IsSet(WSPathPrefixFlag.Name) {
+		cfg.WSPathPrefix = ctx.String(WSPathPrefixFlag.Name)
 	}
 	cfg.WSOrigins = SplitAndTrim(ctx.String(WSAllowedOriginsFlag.Name))
 	cfg.WSModules = SplitAndTrim(ctx.String(WSApiFlag.Name))
@@ -1029,8 +1132,14 @@ func setIPC(ctx *cli.Context, cfg *node.Config) {
 	}
 }
 
-func setPrefix(ctx *cli.Context, cfg *node.Config) {
-	CheckExclusive(ctx, Enable0xPrefixFlag, EnableXDCPrefixFlag)
+// setLes shows the deprecation warnings for LES flags.
+func setLes(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(LightServFlag.Name) {
+		log.Warn("The light server has been deprecated, please remove this flag", "flag", LightServFlag.Name)
+	}
+	if ctx.IsSet(LightPeersFlag.Name) {
+		log.Warn("The light server has been deprecated, please remove this flag", "flag", LightPeersFlag.Name)
+	}
 }
 
 // MakeDatabaseHandles raises out the number of allowed file handles per process
@@ -1095,7 +1204,10 @@ func setEtherbase(ctx *cli.Context, ks *keystore.KeyStore, cfg *ethconfig.Config
 		}
 		cfg.Etherbase = account.Address
 	} else {
-		cfg.Etherbase = common.HexToAddress(ctx.String(MinerEtherbaseFlag.Name))
+		if !ctx.IsSet(UnlockedAccountFlag.Name) {
+			cfg.Etherbase = common.HexToAddress(ctx.String(MinerEtherbaseFlag.Name))
+			log.Info("Set etherbase", "address", cfg.Etherbase.Hex())
+		}
 	}
 }
 
@@ -1124,48 +1236,21 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 	setBootstrapNodes(ctx, cfg)
 	// setBootstrapNodesV5(ctx, cfg)
 
-	lightClient := ctx.String(SyncModeFlag.Name) == "light"
-	lightServer := ctx.Int(LightServFlag.Name) != 0
-	lightPeers := ctx.Int(LightPeersFlag.Name)
-
 	if ctx.IsSet(MaxPeersFlag.Name) {
 		cfg.MaxPeers = ctx.Int(MaxPeersFlag.Name)
-		if lightServer && !ctx.IsSet(LightPeersFlag.Name) {
-			cfg.MaxPeers += lightPeers
-		}
-	} else {
-		if lightServer {
-			cfg.MaxPeers += lightPeers
-		}
-		if lightClient && ctx.IsSet(LightPeersFlag.Name) && cfg.MaxPeers < lightPeers {
-			cfg.MaxPeers = lightPeers
-		}
 	}
-	if !(lightClient || lightServer) {
-		lightPeers = 0
-	}
-	ethPeers := cfg.MaxPeers - lightPeers
-	if lightClient {
-		ethPeers = 0
-	}
-	log.Info("Maximum peer count", "ETH", ethPeers, "LES", lightPeers, "total", cfg.MaxPeers)
+	ethPeers := cfg.MaxPeers
+	log.Info("Maximum peer count", "ETH", ethPeers, "total", cfg.MaxPeers)
 
 	if ctx.IsSet(MaxPendingPeersFlag.Name) {
 		cfg.MaxPendingPeers = ctx.Int(MaxPendingPeersFlag.Name)
 	}
-	if ctx.IsSet(NoDiscoverFlag.Name) || lightClient {
+	if ctx.IsSet(NoDiscoverFlag.Name) {
 		cfg.NoDiscovery = true
 	}
 
-	// if we're running a light client or server, force enable the v5 peer discovery
-	// unless it is explicitly disabled with --nodiscover note that explicitly specifying
-	// --v5disc overrides --nodiscover, in which case the later only disables v4 discovery
-	forceV5Discovery := (lightClient || lightServer) && !ctx.Bool(NoDiscoverFlag.Name)
-	if ctx.IsSet(DiscoveryV5Flag.Name) {
-		cfg.DiscoveryV5 = ctx.Bool(DiscoveryV5Flag.Name)
-	} else if forceV5Discovery {
-		cfg.DiscoveryV5 = true
-	}
+	CheckExclusive(ctx, DiscoveryV5Flag, NoDiscoverFlag)
+	cfg.DiscoveryV5 = ctx.Bool(DiscoveryV5Flag.Name)
 
 	if netrestrict := ctx.String(NetrestrictFlag.Name); netrestrict != "" {
 		list, err := netutil.ParseNetlist(netrestrict)
@@ -1186,13 +1271,21 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 
 // SetNodeConfig applies node-related command line flags to the config.
 func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
+	CheckExclusive(ctx, Enable0xPrefixFlag, EnableXDCPrefixFlag)
 	SetP2PConfig(ctx, &cfg.P2P)
 	setIPC(ctx, cfg)
 	setHTTP(ctx, cfg)
 	setWS(ctx, cfg)
 	setNodeUserIdent(ctx, cfg)
-	setPrefix(ctx, cfg)
 	setSmartCard(ctx, cfg)
+
+	if ctx.IsSet(JWTSecretFlag.Name) {
+		cfg.JWTSecret = ctx.String(JWTSecretFlag.Name)
+	}
+
+	if ctx.IsSet(EnablePersonal.Name) {
+		cfg.EnablePersonal = true
+	}
 
 	switch {
 	case ctx.IsSet(DataDirFlag.Name):
@@ -1220,6 +1313,7 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	if ctx.IsSet(AnnounceTxsFlag.Name) {
 		cfg.AnnounceTxs = ctx.Bool(AnnounceTxsFlag.Name)
 	}
+
 	// deprecation notice for log debug flags (TODO: find a more appropriate place to put these?)
 	if ctx.IsSet(LogBacktraceAtFlag.Name) {
 		log.Warn("log.backtrace flag is deprecated")
@@ -1249,12 +1343,7 @@ func setSmartCard(ctx *cli.Context, cfg *node.Config) {
 	cfg.SmartCardDaemonPath = path
 }
 
-func setGPO(ctx *cli.Context, cfg *gasprice.Config, light bool) {
-	// If we are running the light client, apply another group
-	// settings for gas oracle.
-	if light {
-		*cfg = ethconfig.LightClientGPO
-	}
+func setGPO(ctx *cli.Context, cfg *gasprice.Config) {
 	if ctx.IsSet(GpoBlocksFlag.Name) {
 		cfg.Blocks = ctx.Int(GpoBlocksFlag.Name)
 	}
@@ -1395,13 +1484,13 @@ func SetXDCXConfig(ctx *cli.Context, cfg *XDCx.Config, XDCDataDir string) {
 func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	// Avoid conflicting network flags
 	CheckExclusive(ctx, MainnetFlag, TestnetFlag, DevnetFlag, DeveloperFlag)
-	CheckExclusive(ctx, LightServFlag, SyncModeFlag, "light")
 
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
 	setEtherbase(ctx, ks, cfg)
-	setGPO(ctx, &cfg.GPO, ctx.String(SyncModeFlag.Name) == "light")
+	setGPO(ctx, &cfg.GPO)
 	setTxPool(ctx, &cfg.TxPool)
 	setEthash(ctx, cfg)
+	setLes(ctx, cfg)
 
 	// Cap the cache allowance and tune the garbage collector
 	mem, err := gopsutil.VirtualMemory()
@@ -1428,15 +1517,6 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			Fatalf("invalid --syncmode flag: %v", err)
 		}
 	}
-	if ctx.IsSet(LightServFlag.Name) {
-		cfg.LightServ = ctx.Int(LightServFlag.Name)
-	}
-	if ctx.IsSet(LightPeersFlag.Name) {
-		cfg.LightPeers = ctx.Int(LightPeersFlag.Name)
-	}
-	if ctx.IsSet(NetworkIdFlag.Name) {
-		cfg.NetworkId = ctx.Uint64(NetworkIdFlag.Name)
-	}
 
 	if ctx.IsSet(CacheFlag.Name) || ctx.IsSet(CacheDatabaseFlag.Name) {
 		cfg.DatabaseCache = ctx.Int(CacheFlag.Name) * ctx.Int(CacheDatabaseFlag.Name) / 100
@@ -1447,15 +1527,21 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		Fatalf("--%s must be either 'full' or 'archive'", GCModeFlag.Name)
 	}
 	cfg.NoPruning = ctx.String(GCModeFlag.Name) == "archive"
-
+	cfg.NoPrefetch = !ctx.Bool(CachePrefetchFlag.Name)
+	// Read the value from the flag no matter if it's set or not.
+	cfg.Preimages = ctx.Bool(CachePreimagesFlag.Name)
+	if cfg.NoPruning && !cfg.Preimages {
+		cfg.Preimages = true
+		log.Info("Enabling recording of key preimages since archive mode is used")
+	}
+	if ctx.IsSet(CacheFlag.Name) || ctx.IsSet(CacheTrieFlag.Name) {
+		cfg.TrieCleanCache = ctx.Int(CacheFlag.Name) * ctx.Int(CacheTrieFlag.Name) / 100
+	}
 	if ctx.IsSet(CacheFlag.Name) || ctx.IsSet(CacheGCFlag.Name) {
-		cfg.TrieCache = ctx.Int(CacheFlag.Name) * ctx.Int(CacheGCFlag.Name) / 100
+		cfg.TrieDirtyCache = ctx.Int(CacheFlag.Name) * ctx.Int(CacheGCFlag.Name) / 100
 	}
 	if ctx.IsSet(MinerThreadsFlag.Name) {
 		cfg.MinerThreads = ctx.Int(MinerThreadsFlag.Name)
-	}
-	if ctx.IsSet(DocRootFlag.Name) {
-		cfg.DocRoot = ctx.String(DocRootFlag.Name)
 	}
 	if ctx.IsSet(RPCGlobalGasCapFlag.Name) {
 		cfg.RPCGasCap = ctx.Uint64(RPCGlobalGasCapFlag.Name)
@@ -1488,6 +1574,13 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			os.Mkdir(common.StoreRewardFolder, os.ModePerm)
 		}
 	}
+	if ctx.IsSet(SetHeadFlag.Name) {
+		common.RollbackNumber = ctx.Uint64(SetHeadFlag.Name)
+		if common.RollbackNumber == 0 {
+			Fatalf("the flag --%s must be greater than 0", SetHeadFlag.Name)
+		}
+	}
+
 	// Override any default configs for hard coded networks.
 	switch {
 	case ctx.Bool(MainnetFlag.Name):
@@ -1496,6 +1589,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		}
 		cfg.Genesis = core.DefaultGenesisBlock()
 	case ctx.Bool(TestnetFlag.Name):
+		common.IsTestnet = true
 		if !ctx.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 51
 		}
@@ -1531,10 +1625,49 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	}
 }
 
-// SetupNetwork configures the system for either the main net or some test network.
-func SetupNetwork(ctx *cli.Context) {
-	// TODO(fjl): move target gas limit into config
-	params.TargetGasLimit = ctx.Uint64(MinerGasLimitFlag.Name)
+// RegisterEthService adds an Ethereum client to the stack.
+func RegisterEthService(stack *node.Node, cfg *ethconfig.Config, XDCXServ *XDCx.XDCX, lendingServ *XDCxlending.Lending) (ethapi.Backend, *eth.Ethereum) {
+	if cfg.SyncMode == downloader.LightSync {
+		Fatalf("can't register eth service in light sync mode, light mode has been deprecated")
+		return nil, nil
+	} else {
+		backend, err := eth.New(stack, cfg, XDCXServ, lendingServ)
+		if err != nil {
+			Fatalf("Failed to register the Ethereum service: %v", err)
+		}
+
+		return backend.ApiBackend, backend
+	}
+}
+
+// RegisterEthStatsService configures the Ethereum Stats daemon and adds it to the node.
+func RegisterEthStatsService(stack *node.Node, backend ethapi.Backend, url string) {
+	if err := ethstats.New(stack, backend, backend.Engine(), url); err != nil {
+		Fatalf("Failed to register the Ethereum Stats service: %v", err)
+	}
+}
+
+func RegisterXDCXService(stack *node.Node, cfg *XDCx.Config) (*XDCx.XDCX, *XDCxlending.Lending) {
+	// register XDCx service
+	XDCX := XDCx.New(stack, cfg)
+	// register XDCxlending service
+	lendingServ := XDCxlending.New(stack, XDCX)
+	return XDCX, lendingServ
+}
+
+func SetNetworkFlagById(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(NetworkIdFlag.Name) {
+		cfg.NetworkId = ctx.Uint64(NetworkIdFlag.Name)
+		switch cfg.NetworkId {
+		case 50:
+			ctx.Set(MainnetFlag.Name, "true")
+		case 51:
+			common.IsTestnet = true
+			ctx.Set(TestnetFlag.Name, "true")
+		case 551:
+			ctx.Set(DevnetFlag.Name, "true")
+		}
+	}
 }
 
 // SetupMetrics configures the metrics system.
@@ -1610,11 +1743,7 @@ func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.
 		cache   = ctx.Int(CacheFlag.Name) * ctx.Int(CacheDatabaseFlag.Name) / 100
 		handles = MakeDatabaseHandles(ctx.Int(FDLimitFlag.Name))
 	)
-	name := "chaindata"
-	if ctx.String(SyncModeFlag.Name) == "light" {
-		name = "lightchaindata"
-	}
-	chainDb, err := stack.OpenDatabase(name, cache, handles, "", readonly)
+	chainDb, err := stack.OpenDatabase("chaindata", cache, handles, "", readonly)
 	if err != nil {
 		Fatalf("Could not open database: %v", err)
 	}
@@ -1666,12 +1795,22 @@ func MakeChain(ctx *cli.Context, stack *node.Node, readonly bool) (chain *core.B
 		Fatalf("--%s must be either 'full' or 'archive'", GCModeFlag.Name)
 	}
 	cache := &core.CacheConfig{
-		Disabled:      ctx.String(GCModeFlag.Name) == "archive",
-		TrieNodeLimit: ethconfig.Defaults.TrieCache,
-		TrieTimeLimit: ethconfig.Defaults.TrieTimeout,
+		TrieCleanLimit:      ethconfig.Defaults.TrieCleanCache,
+		TrieCleanNoPrefetch: !ctx.Bool(CachePrefetchFlag.Name),
+		TrieDirtyLimit:      ethconfig.Defaults.TrieDirtyCache,
+		TrieDirtyDisabled:   ctx.String(GCModeFlag.Name) == "archive",
+		TrieTimeLimit:       ethconfig.Defaults.TrieTimeout,
+		Preimages:           ctx.Bool(CachePreimagesFlag.Name),
+	}
+	if cache.TrieDirtyDisabled && !cache.Preimages {
+		cache.Preimages = true
+		log.Info("Enabling recording of key preimages since archive mode is used")
+	}
+	if ctx.IsSet(CacheFlag.Name) || ctx.IsSet(CacheTrieFlag.Name) {
+		cache.TrieCleanLimit = ctx.Int(CacheFlag.Name) * ctx.Int(CacheTrieFlag.Name) / 100
 	}
 	if ctx.IsSet(CacheFlag.Name) || ctx.IsSet(CacheGCFlag.Name) {
-		cache.TrieNodeLimit = ctx.Int(CacheFlag.Name) * ctx.Int(CacheGCFlag.Name) / 100
+		cache.TrieCleanLimit = ctx.Int(CacheFlag.Name) * ctx.Int(CacheGCFlag.Name) / 100
 	}
 	vmcfg := vm.Config{EnablePreimageRecording: ctx.Bool(VMEnableDebugFlag.Name)}
 	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg)
@@ -1723,13 +1862,12 @@ func WalkMatch(root, pattern string) ([]string, error) {
 
 // RegisterFilterAPI adds the eth log filtering RPC API to the node.
 func RegisterFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
-	isLightClient := ethcfg.SyncMode == downloader.LightSync
 	filterSystem := filters.NewFilterSystem(backend, filters.Config{
 		LogCacheSize: ethcfg.FilterLogCacheSize,
 	})
 	stack.RegisterAPIs([]rpc.API{{
 		Namespace: "eth",
-		Service:   filters.NewFilterAPI(filterSystem, isLightClient),
+		Service:   filters.NewFilterAPI(filterSystem, false),
 	}})
 	return filterSystem
 }

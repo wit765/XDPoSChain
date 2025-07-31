@@ -30,6 +30,7 @@ import (
 	"github.com/XinFinOrg/XDPoSChain/internal/jsre"
 	"github.com/XinFinOrg/XDPoSChain/internal/jsre/deps"
 	"github.com/XinFinOrg/XDPoSChain/internal/web3ext"
+	"github.com/XinFinOrg/XDPoSChain/log"
 	"github.com/XinFinOrg/XDPoSChain/rpc"
 	"github.com/dop251/goja"
 	"github.com/mattn/go-colorable"
@@ -186,7 +187,7 @@ func (c *Console) initExtensions() error {
 	if err != nil {
 		return fmt.Errorf("api modules: %v", err)
 	}
-	aliases := map[string]struct{}{"eth": {}, "personal": {}}
+	aliases := map[string]struct{}{"eth": {}}
 	for api := range apis {
 		if api == "web3" {
 			continue
@@ -231,6 +232,7 @@ func (c *Console) initPersonal(vm *goja.Runtime, bridge *bridge) {
 	if personal == nil || c.prompter == nil {
 		return
 	}
+	log.Warn("Enabling deprecated personal namespace")
 	jeth := vm.NewObject()
 	vm.Set("jeth", jeth)
 	jeth.Set("openWallet", personal.Get("openWallet"))
@@ -271,17 +273,13 @@ func (c *Console) AutoCompleteInput(line string, pos int) (string, []string, str
 	if len(line) == 0 || pos == 0 {
 		return "", nil, ""
 	}
-	// Chunck data to relevant part for autocompletion
+	// Chunk data to relevant part for autocompletion
 	// E.g. in case of nested lines eth.getBalance(eth.coinb<tab><tab>
 	start := pos - 1
 	for ; start > 0; start-- {
 		// Skip all methods and namespaces (i.e. including the dot)
-		if line[start] == '.' || (line[start] >= 'a' && line[start] <= 'z') || (line[start] >= 'A' && line[start] <= 'Z') {
-			continue
-		}
-		// Handle web3 in a special way (i.e. other numbers aren't auto completed)
-		if start >= 3 && line[start-3:start] == "web3" {
-			start -= 3
+		c := line[start]
+		if c == '.' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '1' && c <= '9') {
 			continue
 		}
 		// We've hit an unexpected character, autocomplete form here
@@ -294,14 +292,22 @@ func (c *Console) AutoCompleteInput(line string, pos int) (string, []string, str
 // Welcome show summary of current Geth instance and some metadata about the
 // console's available modules.
 func (c *Console) Welcome() {
+	message := "Welcome to the XDC JavaScript console!\n\n"
+
 	// Print some generic XDC metadata
-	fmt.Fprintf(c.printer, "Welcome to the XDC JavaScript console!\n\n")
-	c.jsre.Run(`
-		console.log("instance: " + web3.version.node);
-		console.log("coinbase: " + eth.coinbase);
-		console.log("at block: " + eth.blockNumber + " (" + new Date(1000 * eth.getBlock(eth.blockNumber).timestamp) + ")");
-		console.log(" datadir: " + admin.datadir);
-	`)
+	if res, err := c.jsre.Run(`
+		var message = "instance: " + web3.version.node + "\n";
+		try {
+			message += "coinbase: " + eth.coinbase + "\n";
+		} catch (err) {}
+		message += "at block: " + eth.blockNumber + " (" + new Date(1000 * eth.getBlock(eth.blockNumber).timestamp) + ")\n";
+		try {
+			message += " datadir: " + admin.datadir + "\n";
+		} catch (err) {}
+		message
+	`); err == nil {
+		message += res.String()
+	}
 	// List all the supported modules for the user to call
 	if apis, err := c.client.SupportedModules(); err == nil {
 		modules := make([]string, 0, len(apis))
@@ -309,9 +315,9 @@ func (c *Console) Welcome() {
 			modules = append(modules, fmt.Sprintf("%s:%s", api, version))
 		}
 		sort.Strings(modules)
-		fmt.Fprintln(c.printer, " modules:", strings.Join(modules, " "))
+		message += " modules: " + strings.Join(modules, " ") + "\n"
 	}
-	fmt.Fprintln(c.printer)
+	fmt.Fprintln(c.printer, message)
 }
 
 // Evaluate executes code and pretty prints the result to the specified output

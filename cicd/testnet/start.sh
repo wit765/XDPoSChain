@@ -69,6 +69,24 @@ else
   ws_port=$WS_PORT
 fi
 
+sync_mode=full
+if test -z "$SYNC_MODE"
+then
+  echo "SYNC_MODE not set, default to full" #full or fast
+else
+  echo "SYNC_MODE found, set to $SYNC_MODE"
+  sync_mode=$SYNC_MODE
+fi
+
+gc_mode=archive
+if test -z "$GC_MODE"
+then
+  echo "GC_MODE not set, default to archive" #full or archive
+else
+  echo "GC_MODE found, set to $GC_MODE"
+  gc_mode=$GC_MODE
+fi
+
 INSTANCE_IP=$(curl https://checkip.amazonaws.com)
 netstats="${NODE_NAME}-${wallet}-${INSTANCE_IP}:xdc_xinfin_apothem_network_stats@stats.apothem.network:2000"
 
@@ -79,13 +97,14 @@ echo "Starting nodes with $bootnodes ..."
 # Note: --gcmode=archive means node will store all historical data. This will lead to high memory usage. But sync mode require archive to sync
 # https://github.com/XinFinOrg/XDPoSChain/issues/268
 
-XDC --ethstats ${netstats} --gcmode archive \
+XDC --ethstats ${netstats} \
+--gcmode ${gc_mode} --syncmode ${sync_mode} \
 --nat extip:${INSTANCE_IP} \
---bootnodes ${bootnodes} --syncmode full \
+--bootnodes ${bootnodes} \
 --datadir /work/xdcchain --networkid 51 \
 --port $port --http --http-corsdomain "*" --http-addr 0.0.0.0 \
 --http-port $rpc_port \
---http-api db,eth,debug,net,shh,txpool,personal,web3,XDPoS \
+--http-api db,eth,net,txpool,web3,XDPoS \
 --http-vhosts "*" --unlock "${wallet}" --password /work/.pwd --mine \
 --miner-gasprice "1" --miner-gaslimit "420000000" --verbosity ${log_level} \
 --debugdatadir /work/xdcchain \

@@ -68,6 +68,7 @@ var (
 	XDCXLendingFinalizedTradeAddressBinary = HexToAddress("0x0000000000000000000000000000000000000094")
 	XDCNativeAddressBinary                 = HexToAddress("0x0000000000000000000000000000000000000001")
 	LendingLockAddressBinary               = HexToAddress("0x0000000000000000000000000000000000000011")
+	MintedRecordAddressBinary              = HexToAddress("0x000000000000000000000000000000000000009a")
 )
 
 var (
@@ -270,6 +271,10 @@ func (a Address) Hex() string {
 // String implements fmt.Stringer.
 func (a Address) String() string {
 	return a.Hex()
+}
+
+func (a Address) String0x() string {
+	return string(a.checksumHex())
 }
 
 func (a *Address) checksumHex() []byte {

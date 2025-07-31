@@ -24,17 +24,20 @@ import (
 	"math/big"
 	"os"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"unicode"
 
 	"github.com/XinFinOrg/XDPoSChain/XDCx"
+	"github.com/XinFinOrg/XDPoSChain/accounts"
 	"github.com/XinFinOrg/XDPoSChain/accounts/keystore"
 	"github.com/XinFinOrg/XDPoSChain/accounts/scwallet"
 	"github.com/XinFinOrg/XDPoSChain/accounts/usbwallet"
 	"github.com/XinFinOrg/XDPoSChain/cmd/utils"
 	"github.com/XinFinOrg/XDPoSChain/common"
 	"github.com/XinFinOrg/XDPoSChain/eth/ethconfig"
+	"github.com/XinFinOrg/XDPoSChain/internal/ethapi"
 	"github.com/XinFinOrg/XDPoSChain/internal/flags"
 	"github.com/XinFinOrg/XDPoSChain/log"
 	"github.com/XinFinOrg/XDPoSChain/metrics"
@@ -128,8 +131,9 @@ func defaultNodeConfig() node.Config {
 	return cfg
 }
 
-// makeConfigNode loads geth configuration and creates a blank node instance.
-func makeConfigNode(ctx *cli.Context) (*node.Node, XDCConfig) {
+// loadBaseConfig loads the gethConfig based on the given command line
+// parameters and config file.
+func loadBaseConfig(ctx *cli.Context) XDCConfig {
 	// Load defaults.
 	cfg := XDCConfig{
 		Eth:       ethconfig.Defaults,
@@ -148,36 +152,13 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, XDCConfig) {
 	if ctx.IsSet(utils.MiningEnabledFlag.Name) {
 		log.Warn("The flag --mine is deprecated and will be removed")
 	}
-	// if !ctx.IsSet(debug.VerbosityFlag.Name) {
-	// 	debug.Verbosity(log.Lvl(cfg.Verbosity))
-	// }
 
 	if !ctx.IsSet(utils.NATFlag.Name) && cfg.NAT != "" {
 		ctx.Set(utils.NATFlag.Name, cfg.NAT)
 	}
 
-	// Check testnet is enable.
-	if ctx.Bool(utils.TestnetFlag.Name) {
-		common.IsTestnet = true
-		common.TRC21IssuerSMC = common.TRC21IssuerSMCTestNet
-		cfg.Eth.NetworkId = 51
-		common.RelayerRegistrationSMC = common.RelayerRegistrationSMCTestnet
-		common.TIPTRC21Fee = common.TIPTRC21FeeTestnet
-		common.TIPXDCXCancellationFee = common.TIPXDCXCancellationFeeTestnet
-	}
-
 	if ctx.Bool(utils.EnableXDCPrefixFlag.Name) {
 		common.Enable0xPrefix = false
-	}
-
-	// Rewound
-	if rewound := ctx.Int(utils.RewoundFlag.Name); rewound != 0 {
-		common.Rewound = uint64(rewound)
-	}
-
-	// Check rollback hash exist.
-	if rollbackHash := ctx.String(utils.RollbackFlag.Name); rollbackHash != "" {
-		common.RollbackHash = common.HexToHash(rollbackHash)
 	}
 
 	// Check GasPrice
@@ -203,14 +184,22 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, XDCConfig) {
 	}
 	cfg.Account.Passwords = passwords
 
+	utils.SetNetworkFlagById(ctx, &cfg.Eth)
+
 	// Apply flags.
 	utils.SetNodeConfig(ctx, &cfg.Node)
+	return cfg
+}
+
+// makeConfigNode loads geth configuration and creates a blank node instance.
+func makeConfigNode(ctx *cli.Context) (*node.Node, XDCConfig) {
+	cfg := loadBaseConfig(ctx)
 	stack, err := node.New(&cfg.Node)
 	if err != nil {
 		utils.Fatalf("Failed to create the protocol stack: %v", err)
 	}
 	// Node doesn't by default populate account manager backends
-	if err := setAccountManagerBackends(stack); err != nil {
+	if err := setAccountManagerBackends(stack.Config(), stack.AccountManager(), stack.KeyStoreDir()); err != nil {
 		utils.Fatalf("Failed to set account manager backends: %v", err)
 	}
 
@@ -226,20 +215,7 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, XDCConfig) {
 	return stack, cfg
 }
 
-func applyValues(values []string, params *[]string) {
-	data := []string{}
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			data = append(data, trimmed)
-		}
-	}
-	if len(data) > 0 {
-		*params = data
-	}
-
-}
-
-func makeFullNode(ctx *cli.Context) (*node.Node, XDCConfig) {
+func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend, XDCConfig) {
 	stack, cfg := makeConfigNode(ctx)
 
 	// Start metrics export if enabled
@@ -247,15 +223,29 @@ func makeFullNode(ctx *cli.Context) (*node.Node, XDCConfig) {
 
 	// Register XDCX's OrderBook service if requested.
 	// enable in default
-	utils.RegisterXDCXService(stack, &cfg.XDCX)
-	utils.RegisterEthService(stack, &cfg.Eth, cfg.Node.Version)
+	XDCXServ, lendingServ := utils.RegisterXDCXService(stack, &cfg.XDCX)
+	backend, eth := utils.RegisterEthService(stack, &cfg.Eth, XDCXServ, lendingServ)
+
+	// Create gauge with geth system and build information
+	if eth != nil { // The 'eth' backend may be nil in light mode
+		var protos []string
+		for _, p := range eth.Protocols() {
+			protos = append(protos, fmt.Sprintf("%v/%d", p.Name, p.Version))
+		}
+		metrics.NewRegisteredGaugeInfo("xdc/info", nil).Update(metrics.GaugeInfoValue{
+			"arch":          runtime.GOARCH,
+			"os":            runtime.GOOS,
+			"version":       cfg.Node.Version,
+			"eth_protocols": strings.Join(protos, ","),
+		})
+	}
 
 	// Add the Ethereum Stats daemon if requested.
 	if cfg.Ethstats.URL != "" {
-		utils.RegisterEthStatsService(stack, cfg.Ethstats.URL)
+		utils.RegisterEthStatsService(stack, backend, cfg.Ethstats.URL)
 	}
 
-	return stack, cfg
+	return stack, backend, cfg
 }
 
 // dumpConfig is the dumpconfig command.
@@ -343,10 +333,7 @@ func applyMetricConfig(ctx *cli.Context, cfg *XDCConfig) {
 	}
 }
 
-func setAccountManagerBackends(stack *node.Node) error {
-	conf := stack.Config()
-	am := stack.AccountManager()
-	keydir := stack.KeyStoreDir()
+func setAccountManagerBackends(conf *node.Config, am *accounts.Manager, keydir string) error {
 	scryptN := keystore.StandardScryptN
 	scryptP := keystore.StandardScryptP
 	if conf.UseLightweightKDF {

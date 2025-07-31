@@ -32,6 +32,7 @@ import (
 	"github.com/XinFinOrg/XDPoSChain/ethdb"
 	"github.com/XinFinOrg/XDPoSChain/log"
 	"github.com/XinFinOrg/XDPoSChain/params"
+	"github.com/XinFinOrg/XDPoSChain/trie"
 )
 
 //go:generate go run github.com/fjl/gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
@@ -162,7 +163,7 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	case g != nil:
 		log.Info("[configOrDefault] load orignal config", "hash", ghash)
 		return g.Config
-	case ghash == params.XDCMainnetGenesisHash:
+	case ghash == params.MainnetGenesisHash:
 		log.Info("[configOrDefault] load mainnetconfig")
 		return params.XDCMainnetChainConfig
 	case ghash == params.TestnetGenesisHash:
@@ -213,6 +214,10 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 	if g.Difficulty == nil {
 		head.Difficulty = params.GenesisDifficulty
 	}
+
+	// Notice: Eip1559Block affects the block hash, we must set:
+	//   1. g.Config.Eip1559Block
+	//   2. or common.Eip1559Block
 	if g.Config != nil && g.Config.IsEIP1559(common.Big0) {
 		if g.BaseFee != nil {
 			head.BaseFee = g.BaseFee
@@ -220,30 +225,40 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 			head.BaseFee = new(big.Int).SetUint64(params.InitialBaseFee)
 		}
 	}
+
 	statedb.Commit(false)
 	statedb.Database().TrieDB().Commit(root, true)
 
-	return types.NewBlock(head, nil, nil, nil)
+	return types.NewBlock(head, nil, nil, nil, trie.NewStackTrie(nil))
 }
 
 // Commit writes the block and state of a genesis specification to the database.
 // The block is committed as the canonical head block.
 func (g *Genesis) Commit(db ethdb.Database) (*types.Block, error) {
-	block := g.ToBlock(db)
-	if block.Number().Sign() != 0 {
+	if g.Number != 0 {
 		return nil, errors.New("can't commit genesis block with number > 0")
 	}
-	rawdb.WriteTd(db, block.Hash(), block.NumberU64(), g.Difficulty)
-	rawdb.WriteBlock(db, block)
-	rawdb.WriteReceipts(db, block.Hash(), block.NumberU64(), nil)
-	rawdb.WriteCanonicalHash(db, block.Hash(), block.NumberU64())
-	rawdb.WriteHeadBlockHash(db, block.Hash())
-	rawdb.WriteHeadHeaderHash(db, block.Hash())
 	config := g.Config
+	// if config == nil {
+	// 	config = params.AllEthashProtocolChanges
+	// }
 	if config == nil {
-		config = params.AllEthashProtocolChanges
+		return nil, errors.New("invalid genesis without chain config")
 	}
-	return block, rawdb.WriteChainConfig(db, block.Hash(), config)
+	if config.XDPoS != nil && len(g.ExtraData) < 32+crypto.SignatureLength {
+		return nil, errors.New("can't start XDPoS chain without signers")
+	}
+	block := g.ToBlock(db)
+	batch := db.NewBatch()
+	rawdb.WriteTd(batch, block.Hash(), block.NumberU64(), g.Difficulty)
+	rawdb.WriteBlock(batch, block)
+	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), nil)
+	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())
+	rawdb.WriteHeadBlockHash(batch, block.Hash())
+	rawdb.WriteHeadFastBlockHash(batch, block.Hash())
+	rawdb.WriteHeadHeaderHash(batch, block.Hash())
+	rawdb.WriteChainConfig(db, block.Hash(), config)
+	return block, batch.Write()
 }
 
 // MustCommit writes the genesis block and state to db, panicking on error.
@@ -259,6 +274,7 @@ func (g *Genesis) MustCommit(db ethdb.Database) *types.Block {
 // GenesisBlockForTesting creates and writes a block in which addr has the given wei balance.
 func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big.Int) *types.Block {
 	g := Genesis{
+		Config:  params.TestChainConfig,
 		Alloc:   types.GenesisAlloc{addr: {Balance: balance}},
 		BaseFee: big.NewInt(params.InitialBaseFee),
 	}

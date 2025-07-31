@@ -75,15 +75,12 @@ JavaScript API. See https://github.com/XinFinOrg/XDPoSChain/wiki/JavaScript-Cons
 // same time.
 func localConsole(ctx *cli.Context) error {
 	// Create and start the node based on the CLI flags
-	node, cfg := makeFullNode(ctx)
-	startNode(ctx, node, cfg)
-	defer node.Close()
+	stack, backend, cfg := makeFullNode(ctx)
+	startNode(ctx, stack, backend, cfg)
+	defer stack.Close()
 
 	// Attach to the newly started node and start the JavaScript console
-	client, err := node.Attach()
-	if err != nil {
-		utils.Fatalf("Failed to attach to the inproc XDC: %v", err)
-	}
+	client := stack.Attach()
 	config := console.Config{
 		DataDir: utils.MakeDataDir(ctx),
 		DocRoot: ctx.String(utils.JSpathFlag.Name),
@@ -93,7 +90,7 @@ func localConsole(ctx *cli.Context) error {
 
 	console, err := console.New(config)
 	if err != nil {
-		utils.Fatalf("Failed to start the JavaScript console: %v", err)
+		utils.Fatalf("failed to start the JavaScript console: %v", err)
 	}
 	defer console.Stop(false)
 
@@ -180,15 +177,12 @@ func dialRPC(endpoint string) (*rpc.Client, error) {
 // everything down.
 func ephemeralConsole(ctx *cli.Context) error {
 	// Create and start the node based on the CLI flags
-	node, cfg := makeFullNode(ctx)
-	startNode(ctx, node, cfg)
-	defer node.Close()
+	stack, backend, cfg := makeFullNode(ctx)
+	startNode(ctx, stack, backend, cfg)
+	defer stack.Close()
 
 	// Attach to the newly started node and start the JavaScript console
-	client, err := node.Attach()
-	if err != nil {
-		utils.Fatalf("Failed to attach to the inproc XDC: %v", err)
-	}
+	client := stack.Attach()
 	config := console.Config{
 		DataDir: utils.MakeDataDir(ctx),
 		DocRoot: ctx.String(utils.JSpathFlag.Name),

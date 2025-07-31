@@ -121,9 +121,9 @@ func doInstall(cmdline []string) {
 		var minor int
 		fmt.Sscanf(strings.TrimPrefix(runtime.Version(), "go1."), "%d", &minor)
 
-		if minor < 21 {
+		if minor < 23 {
 			log.Println("You have Go version", runtime.Version())
-			log.Println("XDC requires at least Go version 1.22 and cannot")
+			log.Println("XDC requires at least Go version 1.23 and cannot")
 			log.Println("be compiled with an earlier version. Please upgrade your Go installation.")
 			os.Exit(1)
 		}
@@ -219,10 +219,10 @@ func goToolArch(arch string, cc string, subcmd string, args ...string) *exec.Cmd
 // Running The Tests
 //
 // "tests" also includes static analysis tools such as vet.
-
 func doTest(cmdline []string) {
 	coverage := flag.Bool("coverage", false, "Whether to record code coverage")
 	verbose := flag.Bool("v", false, "Whether to log verbosely")
+	quick := flag.Bool("quick", false, "Whether to skip long time test")
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
 
@@ -231,7 +231,7 @@ func doTest(cmdline []string) {
 		packages = flag.CommandLine.Args()
 	} else {
 		// added all files in all packages (except vendor) to coverage report files count, even there is no test file in the package
-		packages = build.ExpandPackagesNoVendor(packages)
+		packages = build.ExpandPackages(packages, *quick)
 	}
 
 	// Run analysis tools before the tests.

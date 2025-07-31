@@ -19,12 +19,15 @@ package rpc
 import (
 	"encoding/json"
 	"math"
+	"reflect"
 	"testing"
 
 	"github.com/XinFinOrg/XDPoSChain/common"
 )
 
 func TestBlockNumberJSONUnmarshal(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input    string
 		mustFail bool
@@ -39,14 +42,21 @@ func TestBlockNumberJSONUnmarshal(t *testing.T) {
 		6:  {`"0x12"`, false, BlockNumber(18)},
 		7:  {`"0x7fffffffffffffff"`, false, BlockNumber(math.MaxInt64)},
 		8:  {`"0x8000000000000000"`, true, BlockNumber(0)},
-		9:  {"0", true, BlockNumber(0)},
+		9:  {"0", false, BlockNumber(0)},
 		10: {`"ff"`, true, BlockNumber(0)},
 		11: {`"pending"`, false, PendingBlockNumber},
 		12: {`"latest"`, false, LatestBlockNumber},
 		13: {`"earliest"`, false, EarliestBlockNumber},
-		14: {`someString`, true, BlockNumber(0)},
-		15: {`""`, true, BlockNumber(0)},
-		16: {``, true, BlockNumber(0)},
+		14: {`"committed"`, false, CommittedBlockNumber},
+		15: {`"finalized"`, false, CommittedBlockNumber},
+		16: {`someString`, true, BlockNumber(0)},
+		17: {`""`, true, BlockNumber(0)},
+		18: {``, true, BlockNumber(0)},
+		19: {`88439993`, false, BlockNumber(88439993)},
+		20: {`-1`, true, BlockNumber(0)},
+		21: {`9223372036854775807`, false, BlockNumber(9223372036854775807)},
+		22: {`-9223372036854775808`, true, BlockNumber(0)},
+		23: {`18446744073709551615`, true, BlockNumber(0)},
 	}
 
 	for i, test := range tests {
@@ -67,6 +77,8 @@ func TestBlockNumberJSONUnmarshal(t *testing.T) {
 }
 
 func TestBlockNumberOrHash_UnmarshalJSON(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input    string
 		mustFail bool
@@ -86,18 +98,22 @@ func TestBlockNumberOrHash_UnmarshalJSON(t *testing.T) {
 		11: {`"pending"`, false, BlockNumberOrHashWithNumber(PendingBlockNumber)},
 		12: {`"latest"`, false, BlockNumberOrHashWithNumber(LatestBlockNumber)},
 		13: {`"earliest"`, false, BlockNumberOrHashWithNumber(EarliestBlockNumber)},
-		14: {`someString`, true, BlockNumberOrHash{}},
-		15: {`""`, true, BlockNumberOrHash{}},
-		16: {``, true, BlockNumberOrHash{}},
-		17: {`"0x0000000000000000000000000000000000000000000000000000000000000000"`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
-		18: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
-		19: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000","requireCanonical":false}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
-		20: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000","requireCanonical":true}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), true)},
-		21: {`{"blockNumber":"0x1"}`, false, BlockNumberOrHashWithNumber(1)},
-		22: {`{"blockNumber":"pending"}`, false, BlockNumberOrHashWithNumber(PendingBlockNumber)},
-		23: {`{"blockNumber":"latest"}`, false, BlockNumberOrHashWithNumber(LatestBlockNumber)},
-		24: {`{"blockNumber":"earliest"}`, false, BlockNumberOrHashWithNumber(EarliestBlockNumber)},
-		25: {`{"blockNumber":"0x1", "blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}`, true, BlockNumberOrHash{}},
+		14: {`"committed"`, false, BlockNumberOrHashWithNumber(CommittedBlockNumber)},
+		15: {`"finalized"`, false, BlockNumberOrHashWithNumber(CommittedBlockNumber)},
+		16: {`someString`, true, BlockNumberOrHash{}},
+		17: {`""`, true, BlockNumberOrHash{}},
+		18: {``, true, BlockNumberOrHash{}},
+		19: {`"0x0000000000000000000000000000000000000000000000000000000000000000"`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
+		20: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
+		21: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000","requireCanonical":false}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), false)},
+		22: {`{"blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000","requireCanonical":true}`, false, BlockNumberOrHashWithHash(common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"), true)},
+		23: {`{"blockNumber":"0x1"}`, false, BlockNumberOrHashWithNumber(1)},
+		24: {`{"blockNumber":"pending"}`, false, BlockNumberOrHashWithNumber(PendingBlockNumber)},
+		25: {`{"blockNumber":"latest"}`, false, BlockNumberOrHashWithNumber(LatestBlockNumber)},
+		26: {`{"blockNumber":"earliest"}`, false, BlockNumberOrHashWithNumber(EarliestBlockNumber)},
+		27: {`{"blockNumber":"committed"}`, false, BlockNumberOrHashWithNumber(CommittedBlockNumber)},
+		28: {`{"blockNumber":"finalized"}`, false, BlockNumberOrHashWithNumber(CommittedBlockNumber)},
+		29: {`{"blockNumber":"0x1", "blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}`, true, BlockNumberOrHash{}},
 	}
 
 	for i, test := range tests {
@@ -119,6 +135,65 @@ func TestBlockNumberOrHash_UnmarshalJSON(t *testing.T) {
 			hash != expectedHash || hashOk != expectedHashOk ||
 			num != expectedNum || numOk != expectedNumOk {
 			t.Errorf("Test %d got unexpected value, want %v, got %v", i, test.expected, bnh)
+		}
+	}
+}
+
+func TestBlockNumberOrHash_WithNumber_MarshalAndUnmarshal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		number int64
+	}{
+		{"max", math.MaxInt64},
+		{"pending", int64(PendingBlockNumber)},
+		{"latest", int64(LatestBlockNumber)},
+		{"earliest", int64(EarliestBlockNumber)},
+		{"committed", int64(CommittedBlockNumber)},
+		{"finalized", int64(CommittedBlockNumber)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			bnh := BlockNumberOrHashWithNumber(BlockNumber(test.number))
+			marshalled, err := json.Marshal(bnh)
+			if err != nil {
+				t.Fatal("cannot marshal:", err)
+			}
+			var unmarshalled BlockNumberOrHash
+			err = json.Unmarshal(marshalled, &unmarshalled)
+			if err != nil {
+				t.Fatal("cannot unmarshal:", err)
+			}
+			if !reflect.DeepEqual(bnh, unmarshalled) {
+				t.Fatalf("wrong result: expected %v, got %v", bnh, unmarshalled)
+			}
+		})
+	}
+}
+
+func TestBlockNumberOrHash_StringAndUnmarshal(t *testing.T) {
+	t.Parallel()
+
+	tests := []BlockNumberOrHash{
+		BlockNumberOrHashWithNumber(math.MaxInt64),
+		BlockNumberOrHashWithNumber(PendingBlockNumber),
+		BlockNumberOrHashWithNumber(LatestBlockNumber),
+		BlockNumberOrHashWithNumber(EarliestBlockNumber),
+		BlockNumberOrHashWithNumber(CommittedBlockNumber),
+		BlockNumberOrHashWithNumber(32),
+		BlockNumberOrHashWithHash(common.Hash{0xaa}, false),
+	}
+	for _, want := range tests {
+		marshalled, _ := json.Marshal(want.String())
+		var have BlockNumberOrHash
+		if err := json.Unmarshal(marshalled, &have); err != nil {
+			t.Fatalf("cannot unmarshal (%v): %v", string(marshalled), err)
+		}
+		if !reflect.DeepEqual(want, have) {
+			t.Fatalf("wrong result: have %v, want %v", have, want)
 		}
 	}
 }

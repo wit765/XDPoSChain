@@ -547,15 +547,7 @@ func (tx *Transaction) IsVotingTransaction() (bool, *common.Address) {
 
 func (tx *Transaction) IsXDCXApplyTransaction() bool {
 	to := tx.To()
-	if to == nil {
-		return false
-	}
-
-	addr := common.XDCXListingSMC
-	if common.IsTestnet {
-		addr = common.XDCXListingSMCTestNet
-	}
-	if *to != addr {
+	if to == nil || *to != common.XDCXListingSMC {
 		return false
 	}
 	data := tx.Data()
@@ -570,15 +562,7 @@ func (tx *Transaction) IsXDCXApplyTransaction() bool {
 
 func (tx *Transaction) IsXDCZApplyTransaction() bool {
 	to := tx.To()
-	if to == nil {
-		return false
-	}
-
-	addr := common.TRC21IssuerSMC
-	if common.IsTestnet {
-		addr = common.TRC21IssuerSMCTestNet
-	}
-	if *to != addr {
+	if to == nil || *to != common.TRC21IssuerSMC {
 		return false
 	}
 	data := tx.Data()
@@ -648,13 +632,16 @@ type Transactions []*Transaction
 // Len returns the length of s.
 func (s Transactions) Len() int { return len(s) }
 
-// Swap swaps the i'th and the j'th element in s.
-func (s Transactions) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-// GetRlp implements Rlpable and returns the i'th element of s in rlp.
-func (s Transactions) GetRlp(i int) []byte {
-	enc, _ := rlp.EncodeToBytes(s[i])
-	return enc
+// EncodeIndex encodes the i'th transaction to w. Note that this does not check for errors
+// because we assume that *Transaction will only ever contain valid txs that were either
+// constructed by decoding or via public API in this package.
+func (s Transactions) EncodeIndex(i int, w *bytes.Buffer) {
+	tx := s[i]
+	if tx.Type() == LegacyTxType {
+		rlp.Encode(w, tx.inner)
+	} else {
+		tx.encodeTyped(w)
+	}
 }
 
 // TxDifference returns a new set t which is the difference between a to b.
