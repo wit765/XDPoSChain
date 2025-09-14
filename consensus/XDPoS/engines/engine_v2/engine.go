@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -65,6 +66,10 @@ type XDPoS_v2 struct {
 	lockQuorumCert     *types.QuorumCert
 	highestTimeoutCert *types.TimeoutCert
 	highestCommitBlock *types.BlockInfo
+
+	latestReward         map[string]interface{}
+	latestRewardBlocknum uint64
+	latestRewardLock     sync.RWMutex
 
 	HookReward  func(chain consensus.ChainReader, state *state.StateDB, parentState *state.StateDB, header *types.Header) (map[string]interface{}, error)
 	HookPenalty func(chain consensus.ChainReader, number *big.Int, parentHash common.Hash, candidates []common.Address) ([]common.Address, error)
@@ -402,14 +407,23 @@ func (x *XDPoS_v2) Finalize(chain consensus.ChainReader, header *types.Header, s
 		if err != nil {
 			return nil, err
 		}
-		if len(common.StoreRewardFolder) > 0 {
-			data, err := json.Marshal(rewards)
-			if err == nil {
-				err = os.WriteFile(filepath.Join(common.StoreRewardFolder, header.Number.String()+"."+header.Hash().Hex()), data, 0644)
-			}
-			if err != nil {
-				log.Error("Error when save reward info ", "number", header.Number, "hash", header.Hash().Hex(), "err", err)
-			}
+
+		x.signLock.RLock()
+		signer := x.signer
+		x.signLock.RUnlock()
+		x.latestRewardLock.Lock()
+		x.latestReward = rewards
+		x.latestRewardBlocknum = header.Number.Uint64()
+		x.latestRewardLock.Unlock()
+
+		parentHeader := chain.GetHeaderByHash(header.ParentHash)
+		isMyTurn, err := x.YourTurn(chain, parentHeader, signer)
+		if err != nil {
+			log.Error("[Finalize] error checking myturn", "err", err)
+			return nil, err
+		}
+		if !isMyTurn { // if myturn use Seal to save file
+			x.saveRewardToFile(header.Hash(), header.Number.Uint64())
 		}
 	}
 
@@ -470,6 +484,23 @@ func (x *XDPoS_v2) Seal(chain consensus.ChainReader, block *types.Block, stop <-
 		log.Error("[Seal] Error when decode extra field to get the round number from v2 block during sealing", "Hash", header.Hash().Hex(), "Number", header.Number.Uint64(), "Error", err)
 		return nil, err
 	}
+
+	isEpochSwitch, _, err := x.IsEpochSwitch(header)
+	if err != nil {
+		log.Error("[Seal] IsEpochSwitch bug!", "err", err)
+		return nil, err
+	}
+	if isEpochSwitch {
+		parentHeader := chain.GetHeaderByHash(header.ParentHash)
+		isMyTurn, err := x.YourTurn(chain, parentHeader, signer)
+		if err != nil {
+			log.Error("[Seal] error checking myturn", "err", err)
+		}
+		if isMyTurn { // if not myturn use Finalize to save file
+			x.saveRewardToFile(header.Hash(), header.Number.Uint64())
+		}
+	}
+	
 	x.highestSelfMinedRound = decodedExtraField.Round
 
 	return block.WithSeal(header), nil
@@ -1016,4 +1047,38 @@ func (x *XDPoS_v2) periodicJob() {
 
 func (x *XDPoS_v2) GetLatestCommittedBlockInfo() *types.BlockInfo {
 	return x.highestCommitBlock
+}
+
+func (x *XDPoS_v2) saveRewardToFile(blockHash common.Hash, blockNumber uint64) error {
+	if len(common.StoreRewardFolder) == 0 {
+		return nil
+	}
+
+	x.latestRewardLock.RLock()
+	rewards := x.latestReward
+	rewardsBlocknum := x.latestRewardBlocknum
+	x.latestRewardLock.RUnlock()
+
+	if rewardsBlocknum != blockNumber {
+		log.Error("[saveRewardToFile] error blocknumber mismatch with latest reward state, this should not happen!!", "rewardsBlocknum", rewardsBlocknum, "blockNumber", blockNumber)
+		return errors.New("reward block number mismatch")
+	}
+
+	data, err := json.Marshal(rewards)
+	if err != nil {
+		log.Error("[saveRewardToFile] error Marshalling rewards", "err", err)
+		return err
+	}
+
+	filename := strconv.FormatUint(blockNumber, 10) + "." + blockHash.Hex()
+	err = os.WriteFile(filepath.Join(common.StoreRewardFolder, filename), data, 0644)
+	if err != nil {
+		log.Error("[saveRewardToFile] Error when writing reward info", "filename", filename, "rewards", string(data), "err", err)
+		return err
+	}
+
+	log.Debug("[saveRewardToFile] saved rewards", "filename", filename)
+	log.Debug("[saveRewardToFile] saved rewards", "rewards", string(data))
+
+	return nil
 }
