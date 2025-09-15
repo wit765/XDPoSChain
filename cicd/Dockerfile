@@ -26,7 +26,6 @@ WORKDIR /work
 
 RUN apk add --no-cache bash curl
 
-
 COPY --from=builder /builder/build/bin/puppeth /usr/bin
 COPY --from=builder /builder/build/bin/XDC-local /usr/bin
 COPY --from=builder /builder/build/bin/XDC-devnet /usr/bin

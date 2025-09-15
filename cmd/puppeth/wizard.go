@@ -39,7 +39,7 @@ import (
 // between sessions.
 type config struct {
 	path      string   // Output file containing the configuration values
-	inpath		string  // Input file to read genesis generation parameters (optional)
+	inpath    string   // Input file to read genesis generation parameters (optional)
 	bootnodes []string // Bootnodes to always connect to by all nodes
 	ethstats  string   // Ethstats settings to cache for node deploys
 

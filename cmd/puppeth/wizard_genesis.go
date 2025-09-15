@@ -231,7 +231,7 @@ func (w *wizard) makeGenesis() {
 			genesis.Config.XDPoS.V2.CurrentConfig.CertThreshold = w.readDefaultFloat(0.667)
 		}
 		genesis.Config.XDPoS.V2.CurrentConfig.MaxMasternodes = 108
-		//TODO: config to add after rewards upgrade enabled
+		// TODO: config to add after rewards upgrade enabled
 		// genesis.Config.XDPoS.V2.CurrentConfig.MaxProtectornodes
 		// genesis.Config.XDPoS.V2.CurrentConfig.MaxObservernodes
 		// genesis.Config.XDPoS.V2.CurrentConfig.MinProtectornodes
