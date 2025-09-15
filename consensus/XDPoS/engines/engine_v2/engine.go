@@ -69,7 +69,6 @@ type XDPoS_v2 struct {
 
 	latestReward         map[string]interface{}
 	latestRewardBlocknum uint64
-	latestRewardLock     sync.RWMutex
 
 	HookReward  func(chain consensus.ChainReader, state *state.StateDB, parentState *state.StateDB, header *types.Header) (map[string]interface{}, error)
 	HookPenalty func(chain consensus.ChainReader, number *big.Int, parentHash common.Hash, candidates []common.Address) ([]common.Address, error)
@@ -411,17 +410,28 @@ func (x *XDPoS_v2) Finalize(chain consensus.ChainReader, header *types.Header, s
 		x.signLock.RLock()
 		signer := x.signer
 		x.signLock.RUnlock()
-		x.latestRewardLock.Lock()
-		x.latestReward = rewards
+		x.lock.Lock()
 		x.latestRewardBlocknum = header.Number.Uint64()
-		x.latestRewardLock.Unlock()
-
-		parentHeader := chain.GetHeaderByHash(header.ParentHash)
-		isMyTurn, err := x.YourTurn(chain, parentHeader, signer)
+		x.latestReward, err = deepCloneJSON(rewards)
+		x.lock.Unlock()
 		if err != nil {
-			log.Error("[Finalize] error checking myturn", "err", err)
+			log.Error("[Finalize] Error deep cloning latest reward", "err", err)
 			return nil, err
 		}
+
+		var decodedExtraField types.ExtraFields_v2
+		err = utils.DecodeBytesExtraFields(header.Extra, &decodedExtraField)
+		if err != nil {
+			log.Error("[Finalize] Error when decode extra field to get the round number", "Hash", header.Hash().Hex(), "Number", header.Number.Uint64(), "Error", err)
+		}
+
+		parentHeader := chain.GetHeaderByHash(header.ParentHash)
+		isMyTurn, err := x.yourturn(chain, decodedExtraField.Round, parentHeader, signer)
+		if err != nil {
+			log.Error("[Finalize] Error checking myturn", "err", err)
+			return nil, err
+		}
+
 		if !isMyTurn { // if myturn use Seal to save file
 			x.saveRewardToFile(header.Hash(), header.Number.Uint64())
 		}
@@ -492,15 +502,15 @@ func (x *XDPoS_v2) Seal(chain consensus.ChainReader, block *types.Block, stop <-
 	}
 	if isEpochSwitch {
 		parentHeader := chain.GetHeaderByHash(header.ParentHash)
-		isMyTurn, err := x.YourTurn(chain, parentHeader, signer)
+		isMyTurn, err := x.yourturn(chain, decodedExtraField.Round, parentHeader, signer)
+
 		if err != nil {
-			log.Error("[Seal] error checking myturn", "err", err)
+			log.Error("[Seal] Error checking myturn", "err", err)
 		}
 		if isMyTurn { // if not myturn use Finalize to save file
 			x.saveRewardToFile(header.Hash(), header.Number.Uint64())
 		}
 	}
-	
 	x.highestSelfMinedRound = decodedExtraField.Round
 
 	return block.WithSeal(header), nil
@@ -1049,36 +1059,56 @@ func (x *XDPoS_v2) GetLatestCommittedBlockInfo() *types.BlockInfo {
 	return x.highestCommitBlock
 }
 
-func (x *XDPoS_v2) saveRewardToFile(blockHash common.Hash, blockNumber uint64) error {
+func (x *XDPoS_v2) saveRewardToFile(blockHash common.Hash, blockNumber uint64) {
 	if len(common.StoreRewardFolder) == 0 {
-		return nil
+		log.Info("[saveRewardToFile] Skip saving reward to file", "len(common.StoreRewardFolder)", len(common.StoreRewardFolder))
+		return
 	}
 
-	x.latestRewardLock.RLock()
-	rewards := x.latestReward
+	x.lock.RLock()
 	rewardsBlocknum := x.latestRewardBlocknum
-	x.latestRewardLock.RUnlock()
+	rewards, err := deepCloneJSON(x.latestReward)
+	x.lock.RUnlock()
+	if err != nil {
+		log.Error("[saveRewardToFile] Error deep cloning latest reward", "err", err)
+		return
+	}
 
 	if rewardsBlocknum != blockNumber {
-		log.Error("[saveRewardToFile] error blocknumber mismatch with latest reward state, this should not happen!!", "rewardsBlocknum", rewardsBlocknum, "blockNumber", blockNumber)
-		return errors.New("reward block number mismatch")
+		log.Error("[saveRewardToFile] Error blocknumber mismatch with latest reward state, this should not happen!!", "rewardsBlocknum", rewardsBlocknum, "blockNumber", blockNumber)
+		return
 	}
 
 	data, err := json.Marshal(rewards)
 	if err != nil {
-		log.Error("[saveRewardToFile] error Marshalling rewards", "err", err)
-		return err
+		log.Error("[saveRewardToFile] Error Marshalling rewards", "err", err)
+		return
 	}
 
 	filename := strconv.FormatUint(blockNumber, 10) + "." + blockHash.Hex()
 	err = os.WriteFile(filepath.Join(common.StoreRewardFolder, filename), data, 0644)
 	if err != nil {
 		log.Error("[saveRewardToFile] Error when writing reward info", "filename", filename, "rewards", string(data), "err", err)
-		return err
+		return
 	}
 
-	log.Debug("[saveRewardToFile] saved rewards", "filename", filename)
-	log.Debug("[saveRewardToFile] saved rewards", "rewards", string(data))
+	log.Debug("[saveRewardToFile] Saved rewards", "filename", filename)
+	log.Debug("[saveRewardToFile] Saved rewards", "rewards", string(data))
 
-	return nil
+	return
+}
+
+func deepCloneJSON(original map[string]interface{}) (map[string]interface{}, error) {
+	data, err := json.Marshal(original)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal: %w", err)
+	}
+
+	var cloned map[string]interface{}
+	err = json.Unmarshal(data, &cloned)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal: %w", err)
+	}
+
+	return cloned, nil
 }
