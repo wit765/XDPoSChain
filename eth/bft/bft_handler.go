@@ -78,7 +78,7 @@ func (b *Bfter) SetConsensusFuns(engine consensus.Engine) {
 }
 
 func (b *Bfter) Vote(peer string, vote *types.Vote) error {
-	log.Trace("[Vote] Receive Vote", "hash", vote.Hash().Hex(), "voted block hash", vote.ProposedBlockInfo.Hash.Hex(), "number", vote.ProposedBlockInfo.Number, "round", vote.ProposedBlockInfo.Round)
+	log.Trace("[Vote] Received Vote", "hash", vote.Hash().Hex(), "voted block hash", vote.ProposedBlockInfo.Hash.Hex(), "number", vote.ProposedBlockInfo.Number, "round", vote.ProposedBlockInfo.Round)
 
 	voteBlockNum := vote.ProposedBlockInfo.Number.Int64()
 	if dist := voteBlockNum - int64(b.chainHeight()); dist < -maxBlockDist || dist > maxBlockDist {
@@ -126,7 +126,7 @@ func (b *Bfter) Timeout(peer string, timeout *types.Timeout) error {
 		log.Error("[Timeout] Verify BFT Timeout", "timeoutRound", timeout.Round, "timeoutGapNum", gapNum, "error", err)
 		return err
 	}
-	log.Debug("[Timeout] Receive Timeout", "gap", gapNum, "hash", timeout.Hash().Hex(), "round", timeout.Round, "signer", timeout.GetSigner().Hex()) //get signer after verifyTimeout
+	log.Debug("[Timeout] Received Timeout", "gap", gapNum, "hash", timeout.Hash().Hex(), "round", timeout.Round, "signer", timeout.GetSigner().Hex()) //get signer after verifyTimeout
 
 	if verified {
 		b.broadcastCh <- timeout
@@ -144,16 +144,21 @@ func (b *Bfter) Timeout(peer string, timeout *types.Timeout) error {
 	return nil
 }
 func (b *Bfter) SyncInfo(peer string, syncInfo *types.SyncInfo) error {
-	log.Debug("[SyncInfo] Receive SyncInfo")
-
 	if syncInfo == nil || syncInfo.HighestQuorumCert == nil {
 		log.Warn("[SyncInfo] Received nil SyncInfo or missing QC", "syncInfo", syncInfo)
 		return nil
 	}
+	log.Debug("[SyncInfo] Received SyncInfo", "syncInfo", syncInfo, "syncInfoHash", syncInfo.Hash().Hex())
+	if syncInfo.HighestQuorumCert != nil {
+		log.Debug("[SyncInfo] Received SyncInfo", "qcRound", syncInfo.HighestQuorumCert.ProposedBlockInfo.Round, "qcBlocknum", syncInfo.HighestQuorumCert.ProposedBlockInfo.Number, "qcBlockhash", syncInfo.HighestQuorumCert.ProposedBlockInfo.Hash.Hex())
+	}
+	if syncInfo.HighestTimeoutCert != nil {
+		log.Debug("[SyncInfo] Received SyncInfo", "tcRound", syncInfo.HighestTimeoutCert.Round) 
+	}
 
 	qcBlockNum := syncInfo.HighestQuorumCert.ProposedBlockInfo.Number.Int64()
 	if dist := qcBlockNum - int64(b.chainHeight()); dist < -maxBlockDist || dist > maxBlockDist {
-		log.Debug("[SyncInfo] Discarded propagated syncInfo, too far away", "peer", peer, "blockNum", syncInfo.HighestQuorumCert.ProposedBlockInfo.Number, "hash", syncInfo.Hash, "qcRound", syncInfo.HighestQuorumCert.ProposedBlockInfo.Round, "distance", dist)
+		log.Debug("[SyncInfo] Discarded propagated syncInfo, too far away", "peer", peer, "distance", dist, "hash", syncInfo.Hash().Hex())
 		return nil
 	}
 
