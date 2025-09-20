@@ -28,9 +28,9 @@ var localConstant = constant{
 	tipXDCXReceiverDisable: big.NewInt(0),
 	eip1559Block:           big.NewInt(0),
 	cancunBlock:            big.NewInt(0),
-	tipUpgradeReward:       big.NewInt(0),
-	tipUpgradePenalty:      big.NewInt(0),
-	tipEpochHalving:        big.NewInt(0),
+	tipUpgradeReward:       big.NewInt(999999999),
+	tipUpgradePenalty:      big.NewInt(999999999),
+	tipEpochHalving:        big.NewInt(999999999),
 
 	trc21IssuerSMC:         HexToAddress("0x8c0faeb5C6bEd2129b8674F262Fd45c4e9468bee"),
 	xdcxListingSMC:         HexToAddress("0xDE34dD0f536170993E8CFF639DdFfCF1A85D3E53"),

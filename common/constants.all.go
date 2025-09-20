@@ -128,15 +128,15 @@ func IsInBlacklist(address *Address) bool {
 // It skips mainnet since the default value is from mainnet.
 func CopyConstants(chainID uint64) {
 	var c *constant
-	if chainID == TestnetConstant.chainID {
+	if chainID == MaintnetConstant.chainID {
+		return
+	} else if chainID == TestnetConstant.chainID {
 		c = &TestnetConstant
 		IsTestnet = true
 	} else if chainID == DevnetConstant.chainID {
 		c = &DevnetConstant
-	} else if chainID == localConstant.chainID {
+	} else { // local custom chain, it can have any chainID
 		c = &localConstant
-	} else {
-		return
 	}
 
 	MaxMasternodesV2 = c.maxMasternodesV2
