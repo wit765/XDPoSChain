@@ -415,7 +415,7 @@ func (x *XDPoS_v2) Finalize(chain consensus.ChainReader, header *types.Header, s
 		x.latestReward, err = deepCloneJSON(rewards)
 		x.lock.Unlock()
 		if err != nil {
-			log.Error("[Finalize] Error deep cloning latest reward", "err", err)
+			log.Error("[Finalize] Error deep cloning latest reward", "err", err, "rewards", rewards)
 			return nil, err
 		}
 
@@ -428,7 +428,7 @@ func (x *XDPoS_v2) Finalize(chain consensus.ChainReader, header *types.Header, s
 		parentHeader := chain.GetHeaderByHash(header.ParentHash)
 		isMyTurn, err := x.yourturn(chain, decodedExtraField.Round, parentHeader, signer)
 		if err != nil {
-			log.Error("[Finalize] Error checking myturn", "err", err)
+			log.Error("[Finalize] Error checking myturn", "err", err, "round", decodedExtraField.Round, "signer", signer, "parentHeader", parentHeader)
 			return nil, err
 		}
 
@@ -505,7 +505,8 @@ func (x *XDPoS_v2) Seal(chain consensus.ChainReader, block *types.Block, stop <-
 		isMyTurn, err := x.yourturn(chain, decodedExtraField.Round, parentHeader, signer)
 
 		if err != nil {
-			log.Error("[Seal] Error checking myturn", "err", err)
+			log.Error("[Seal] Error checking myturn", "err", err, "round", decodedExtraField.Round, "signer", signer, "parentHeader", parentHeader)
+			return nil, err
 		}
 		if isMyTurn { // if not myturn use Finalize to save file
 			x.saveRewardToFile(header.Hash(), header.Number.Uint64())
@@ -1081,7 +1082,7 @@ func (x *XDPoS_v2) saveRewardToFile(blockHash common.Hash, blockNumber uint64) {
 
 	data, err := json.Marshal(rewards)
 	if err != nil {
-		log.Error("[saveRewardToFile] Error Marshalling rewards", "err", err)
+		log.Error("[saveRewardToFile] Error Marshalling rewards", "err", err, "rewards", rewards)
 		return
 	}
 
