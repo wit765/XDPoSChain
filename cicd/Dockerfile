@@ -1,7 +1,5 @@
 FROM golang:1.25-alpine AS builder
 
-ENV GODEBUG=randseednop=0
-
 RUN apk add make build-base linux-headers
 
 COPY . /builder
@@ -21,6 +19,8 @@ RUN cd /builder && make && mv /builder/build/bin/XDC /builder/build/bin/XDC-loca
 
 # The runtime image
 FROM alpine:3
+
+ENV GODEBUG=randseednop=0
 
 WORKDIR /work
 
