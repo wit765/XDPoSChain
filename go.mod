@@ -4,14 +4,13 @@ go 1.25
 
 require (
 	github.com/VictoriaMetrics/fastcache v1.12.2
-	github.com/btcsuite/btcd v0.0.0-20171128150713-2e60448ffcc6
 	github.com/cespare/cp v1.1.1
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/docker v1.4.2-0.20180625184442-8e610b2b55bf
 	github.com/fatih/color v1.13.0
 	github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb
-	github.com/gorilla/websocket v1.4.2
+	github.com/gorilla/websocket v1.5.0
 	github.com/holiman/uint256 v1.3.2
 	github.com/huin/goupnp v1.3.0
 	github.com/jackpal/go-nat-pmp v1.0.2
@@ -33,6 +32,7 @@ require (
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
+	github.com/btcsuite/btcd/btcec/v2 v2.2.0
 	github.com/consensys/gnark-crypto v0.10.0
 	github.com/deckarep/golang-set/v2 v2.7.0
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1
