@@ -308,26 +308,26 @@ func NewBlockChainAPI(b Backend, chainReader consensus.ChainReader) *BlockChainA
 }
 
 // ChainId returns the chainID value for transaction replay protection.
-func (s *BlockChainAPI) ChainId() *hexutil.Big {
-	return (*hexutil.Big)(s.b.ChainConfig().ChainID)
+func (api *BlockChainAPI) ChainId() *hexutil.Big {
+	return (*hexutil.Big)(api.b.ChainConfig().ChainID)
 }
 
 // BlockNumber returns the block number of the chain head.
-func (s *BlockChainAPI) BlockNumber() hexutil.Uint64 {
-	header, _ := s.b.HeaderByNumber(context.Background(), rpc.LatestBlockNumber) // latest header should always be available
+func (api *BlockChainAPI) BlockNumber() hexutil.Uint64 {
+	header, _ := api.b.HeaderByNumber(context.Background(), rpc.LatestBlockNumber) // latest header should always be available
 	return hexutil.Uint64(header.Number.Uint64())
 }
 
 // BlockNumber returns the block number of the chain head.
-func (s *BlockChainAPI) GetRewardByHash(hash common.Hash) map[string]map[string]map[string]*big.Int {
-	return s.b.GetRewardByHash(hash)
+func (api *BlockChainAPI) GetRewardByHash(hash common.Hash) map[string]map[string]map[string]*big.Int {
+	return api.b.GetRewardByHash(hash)
 }
 
 // GetBalance returns the amount of wei for the given address in the state of the
 // given block number. The rpc.LatestBlockNumber and rpc.PendingBlockNumber meta
 // block numbers are also allowed.
-func (s *BlockChainAPI) GetBalance(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Big, error) {
-	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+func (api *BlockChainAPI) GetBalance(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Big, error) {
+	state, _, err := api.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
 		return nil, err
 	}
@@ -335,12 +335,12 @@ func (s *BlockChainAPI) GetBalance(ctx context.Context, address common.Address, 
 }
 
 // GetTransactionAndReceiptProof returns the Trie transaction and receipt proof of the given transaction hash.
-func (s *BlockChainAPI) GetTransactionAndReceiptProof(ctx context.Context, hash common.Hash) (map[string]interface{}, error) {
-	tx, blockHash, _, index := rawdb.ReadTransaction(s.b.ChainDb(), hash)
+func (api *BlockChainAPI) GetTransactionAndReceiptProof(ctx context.Context, hash common.Hash) (map[string]interface{}, error) {
+	tx, blockHash, _, index := rawdb.ReadTransaction(api.b.ChainDb(), hash)
 	if tx == nil {
 		return nil, nil
 	}
-	block, err := s.b.GetBlock(ctx, blockHash)
+	block, err := api.b.GetBlock(ctx, blockHash)
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +352,7 @@ func (s *BlockChainAPI) GetTransactionAndReceiptProof(ctx context.Context, hash 
 	if err := tx_tr.Prove(keybuf.Bytes(), 0, &tx_proof); err != nil {
 		return nil, err
 	}
-	receipts, err := s.b.GetReceipts(ctx, blockHash)
+	receipts, err := api.b.GetReceipts(ctx, blockHash)
 	if err != nil {
 		return nil, err
 	}
@@ -408,10 +408,10 @@ func (api *BlockChainAPI) GetHeaderByHash(ctx context.Context, hash common.Hash)
 
 // GetBlockByNumber returns the requested block. When blockNr is -1 the chain head is returned. When fullTx is true all
 // transactions in the block are returned in full detail, otherwise only the transaction hash is returned.
-func (s *BlockChainAPI) GetBlockByNumber(ctx context.Context, number rpc.BlockNumber, fullTx bool) (map[string]interface{}, error) {
-	block, err := s.b.BlockByNumber(ctx, number)
+func (api *BlockChainAPI) GetBlockByNumber(ctx context.Context, number rpc.BlockNumber, fullTx bool) (map[string]interface{}, error) {
+	block, err := api.b.BlockByNumber(ctx, number)
 	if block != nil {
-		response, err := s.rpcMarshalBlock(ctx, block, true, fullTx)
+		response, err := api.rpcMarshalBlock(ctx, block, true, fullTx)
 		if err == nil && number == rpc.PendingBlockNumber {
 			// Pending blocks need to nil out a few fields
 			for _, field := range []string{"hash", "nonce", "miner", "number"} {
@@ -425,18 +425,18 @@ func (s *BlockChainAPI) GetBlockByNumber(ctx context.Context, number rpc.BlockNu
 
 // GetBlockByHash returns the requested block. When fullTx is true all transactions in the block are returned in full
 // detail, otherwise only the transaction hash is returned.
-func (s *BlockChainAPI) GetBlockByHash(ctx context.Context, hash common.Hash, fullTx bool) (map[string]interface{}, error) {
-	block, err := s.b.GetBlock(ctx, hash)
+func (api *BlockChainAPI) GetBlockByHash(ctx context.Context, hash common.Hash, fullTx bool) (map[string]interface{}, error) {
+	block, err := api.b.GetBlock(ctx, hash)
 	if block != nil {
-		return s.rpcMarshalBlock(ctx, block, true, fullTx)
+		return api.rpcMarshalBlock(ctx, block, true, fullTx)
 	}
 	return nil, err
 }
 
 // GetUncleByBlockNumberAndIndex returns the uncle block for the given block hash and index. When fullTx is true
 // all transactions in the block are returned in full detail, otherwise only the transaction hash is returned.
-func (s *BlockChainAPI) GetUncleByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) (map[string]interface{}, error) {
-	block, err := s.b.BlockByNumber(ctx, blockNr)
+func (api *BlockChainAPI) GetUncleByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) (map[string]interface{}, error) {
+	block, err := api.b.BlockByNumber(ctx, blockNr)
 	if block != nil {
 		uncles := block.Uncles()
 		if index >= hexutil.Uint(len(uncles)) {
@@ -444,7 +444,7 @@ func (s *BlockChainAPI) GetUncleByBlockNumberAndIndex(ctx context.Context, block
 			return nil, nil
 		}
 		block = types.NewBlockWithHeader(uncles[index])
-		return s.rpcMarshalBlock(ctx, block, false, false)
+		return api.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
 }
@@ -452,8 +452,8 @@ func (s *BlockChainAPI) GetUncleByBlockNumberAndIndex(ctx context.Context, block
 // GetUncleByBlockHashAndIndex returns the uncle block for the given block hash and index. When fullTx is true
 // all transactions in the block are returned in full detail, otherwise only the transaction hash is returned.
 // DEPRECATED SINCE 1.0
-func (s *BlockChainAPI) GetUncleByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index hexutil.Uint) (map[string]interface{}, error) {
-	block, err := s.b.GetBlock(ctx, blockHash)
+func (api *BlockChainAPI) GetUncleByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index hexutil.Uint) (map[string]interface{}, error) {
+	block, err := api.b.GetBlock(ctx, blockHash)
 	if block != nil {
 		uncles := block.Uncles()
 		if index >= hexutil.Uint(len(uncles)) {
@@ -461,15 +461,15 @@ func (s *BlockChainAPI) GetUncleByBlockHashAndIndex(ctx context.Context, blockHa
 			return nil, nil
 		}
 		block = types.NewBlockWithHeader(uncles[index])
-		return s.rpcMarshalBlock(ctx, block, false, false)
+		return api.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
 }
 
 // GetUncleCountByBlockNumber returns number of uncles in the block for the given block number
 // DEPRECATED SINCE 1.0
-func (s *BlockChainAPI) GetUncleCountByBlockNumber(ctx context.Context, blockNr rpc.BlockNumber) *hexutil.Uint {
-	if block, _ := s.b.BlockByNumber(ctx, blockNr); block != nil {
+func (api *BlockChainAPI) GetUncleCountByBlockNumber(ctx context.Context, blockNr rpc.BlockNumber) *hexutil.Uint {
+	if block, _ := api.b.BlockByNumber(ctx, blockNr); block != nil {
 		n := hexutil.Uint(len(block.Uncles()))
 		return &n
 	}
@@ -478,8 +478,8 @@ func (s *BlockChainAPI) GetUncleCountByBlockNumber(ctx context.Context, blockNr 
 
 // GetUncleCountByBlockHash returns number of uncles in the block for the given block hash
 // DEPRECATED SINCE 1.0
-func (s *BlockChainAPI) GetUncleCountByBlockHash(ctx context.Context, blockHash common.Hash) *hexutil.Uint {
-	if block, _ := s.b.GetBlock(ctx, blockHash); block != nil {
+func (api *BlockChainAPI) GetUncleCountByBlockHash(ctx context.Context, blockHash common.Hash) *hexutil.Uint {
+	if block, _ := api.b.GetBlock(ctx, blockHash); block != nil {
 		n := hexutil.Uint(len(block.Uncles()))
 		return &n
 	}
@@ -487,8 +487,8 @@ func (s *BlockChainAPI) GetUncleCountByBlockHash(ctx context.Context, blockHash 
 }
 
 // GetCode returns the code stored at the given address in the state for the given block number.
-func (s *BlockChainAPI) GetCode(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
-	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+func (api *BlockChainAPI) GetCode(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
+	state, _, err := api.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
 		return nil, err
 	}
@@ -497,8 +497,8 @@ func (s *BlockChainAPI) GetCode(ctx context.Context, address common.Address, blo
 }
 
 // GetAccountInfo returns the information at the given address in the state for the given block number.
-func (s *BlockChainAPI) GetAccountInfo(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (map[string]interface{}, error) {
-	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+func (api *BlockChainAPI) GetAccountInfo(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (map[string]interface{}, error) {
+	state, _, err := api.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
 		return nil, err
 	}
@@ -517,8 +517,8 @@ func (s *BlockChainAPI) GetAccountInfo(ctx context.Context, address common.Addre
 // GetStorageAt returns the storage from the state at the given address, key and
 // block number. The rpc.LatestBlockNumber and rpc.PendingBlockNumber meta block
 // numbers are also allowed.
-func (s *BlockChainAPI) GetStorageAt(ctx context.Context, address common.Address, key string, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
-	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+func (api *BlockChainAPI) GetStorageAt(ctx context.Context, address common.Address, key string, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
+	state, _, err := api.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
 		return nil, err
 	}
@@ -527,14 +527,14 @@ func (s *BlockChainAPI) GetStorageAt(ctx context.Context, address common.Address
 }
 
 // GetBlockReceipts returns the block receipts for the given block hash or number or tag.
-func (s *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) ([]map[string]interface{}, error) {
-	block, err := s.b.BlockByNumberOrHash(ctx, blockNrOrHash)
+func (api *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) ([]map[string]interface{}, error) {
+	block, err := api.b.BlockByNumberOrHash(ctx, blockNrOrHash)
 	if block == nil || err != nil {
 		// When the block doesn't exist, the RPC method should return JSON null
 		// as per specification.
 		return nil, nil
 	}
-	receipts, err := s.b.GetReceipts(ctx, block.Hash())
+	receipts, err := api.b.GetReceipts(ctx, block.Hash())
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +544,7 @@ func (s *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rpc.
 	}
 
 	// Derive the sender.
-	signer := types.MakeSigner(s.b.ChainConfig(), block.Number())
+	signer := types.MakeSigner(api.b.ChainConfig(), block.Number())
 
 	result := make([]map[string]interface{}, len(receipts))
 	for i, receipt := range receipts {
@@ -649,71 +649,71 @@ func (diff *BlockOverrides) Apply(blockCtx *vm.BlockContext) {
 	}
 }
 
-func (s *BlockChainAPI) GetBlockSignersByHash(ctx context.Context, blockHash common.Hash) ([]common.Address, error) {
-	block, err := s.b.GetBlock(ctx, blockHash)
+func (api *BlockChainAPI) GetBlockSignersByHash(ctx context.Context, blockHash common.Hash) ([]common.Address, error) {
+	block, err := api.b.GetBlock(ctx, blockHash)
 	if err != nil || block == nil {
 		return []common.Address{}, err
 	}
-	masternodes, err := s.GetMasternodes(ctx, block)
+	masternodes, err := api.GetMasternodes(ctx, block)
 	if err != nil || len(masternodes) == 0 {
 		log.Error("Failed to get masternodes", "err", err, "len(masternodes)", len(masternodes))
 		return []common.Address{}, err
 	}
-	return s.rpcOutputBlockSigners(block, ctx, masternodes)
+	return api.rpcOutputBlockSigners(block, ctx, masternodes)
 }
 
-func (s *BlockChainAPI) GetBlockSignersByNumber(ctx context.Context, blockNumber rpc.BlockNumber) ([]common.Address, error) {
-	block, err := s.b.BlockByNumber(ctx, blockNumber)
+func (api *BlockChainAPI) GetBlockSignersByNumber(ctx context.Context, blockNumber rpc.BlockNumber) ([]common.Address, error) {
+	block, err := api.b.BlockByNumber(ctx, blockNumber)
 	if err != nil || block == nil {
 		return []common.Address{}, err
 	}
-	masternodes, err := s.GetMasternodes(ctx, block)
+	masternodes, err := api.GetMasternodes(ctx, block)
 	if err != nil || len(masternodes) == 0 {
 		log.Error("Failed to get masternodes", "err", err, "len(masternodes)", len(masternodes))
 		return []common.Address{}, err
 	}
-	return s.rpcOutputBlockSigners(block, ctx, masternodes)
+	return api.rpcOutputBlockSigners(block, ctx, masternodes)
 }
 
-func (s *BlockChainAPI) GetBlockFinalityByHash(ctx context.Context, blockHash common.Hash) (uint, error) {
-	block, err := s.b.GetBlock(ctx, blockHash)
+func (api *BlockChainAPI) GetBlockFinalityByHash(ctx context.Context, blockHash common.Hash) (uint, error) {
+	block, err := api.b.GetBlock(ctx, blockHash)
 	if err != nil || block == nil {
 		return uint(0), err
 	}
-	masternodes, err := s.GetMasternodes(ctx, block)
+	masternodes, err := api.GetMasternodes(ctx, block)
 	if err != nil || len(masternodes) == 0 {
 		log.Error("Failed to get masternodes", "err", err, "len(masternodes)", len(masternodes))
 		return uint(0), err
 	}
-	return s.findFinalityOfBlock(ctx, block, masternodes)
+	return api.findFinalityOfBlock(ctx, block, masternodes)
 }
 
-func (s *BlockChainAPI) GetBlockFinalityByNumber(ctx context.Context, blockNumber rpc.BlockNumber) (uint, error) {
-	block, err := s.b.BlockByNumber(ctx, blockNumber)
+func (api *BlockChainAPI) GetBlockFinalityByNumber(ctx context.Context, blockNumber rpc.BlockNumber) (uint, error) {
+	block, err := api.b.BlockByNumber(ctx, blockNumber)
 	if err != nil || block == nil {
 		return uint(0), err
 	}
-	masternodes, err := s.GetMasternodes(ctx, block)
+	masternodes, err := api.GetMasternodes(ctx, block)
 	if err != nil || len(masternodes) == 0 {
 		log.Error("Failed to get masternodes", "err", err, "len(masternodes)", len(masternodes))
 		return uint(0), err
 	}
-	return s.findFinalityOfBlock(ctx, block, masternodes)
+	return api.findFinalityOfBlock(ctx, block, masternodes)
 }
 
 // GetMasternodes returns masternodes set at the starting block of epoch of the given block
-func (s *BlockChainAPI) GetMasternodes(ctx context.Context, b *types.Block) ([]common.Address, error) {
+func (api *BlockChainAPI) GetMasternodes(ctx context.Context, b *types.Block) ([]common.Address, error) {
 	var masternodes []common.Address
 	if b.Number().Int64() >= 0 {
 		curBlockNumber := b.Number().Uint64()
 		prevBlockNumber := curBlockNumber + (common.MergeSignRange - (curBlockNumber % common.MergeSignRange))
-		latestBlockNumber := s.b.CurrentBlock().Number().Uint64()
-		if prevBlockNumber >= latestBlockNumber || !s.b.ChainConfig().IsTIP2019(b.Number()) {
+		latestBlockNumber := api.b.CurrentBlock().Number().Uint64()
+		if prevBlockNumber >= latestBlockNumber || !api.b.ChainConfig().IsTIP2019(b.Number()) {
 			prevBlockNumber = curBlockNumber
 		}
-		if engine, ok := s.b.Engine().(*XDPoS.XDPoS); ok {
+		if engine, ok := api.b.Engine().(*XDPoS.XDPoS); ok {
 			// Get block epoc latest.
-			return engine.GetMasternodesByNumber(s.chainReader, prevBlockNumber), nil
+			return engine.GetMasternodesByNumber(api.chainReader, prevBlockNumber), nil
 		} else {
 			log.Error("Undefined XDPoS consensus engine")
 		}
@@ -722,7 +722,7 @@ func (s *BlockChainAPI) GetMasternodes(ctx context.Context, b *types.Block) ([]c
 }
 
 // GetCandidateStatus returns status of the given candidate at a specified epochNumber
-func (s *BlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAddress common.Address, epoch rpc.EpochNumber) (map[string]interface{}, error) {
+func (api *BlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAddress common.Address, epoch rpc.EpochNumber) (map[string]interface{}, error) {
 	var (
 		block                    *types.Block
 		header                   *types.Header
@@ -740,13 +740,13 @@ func (s *BlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAddress 
 		fieldSuccess:  true,
 	}
 
-	epochConfig := s.b.ChainConfig().XDPoS.Epoch
+	epochConfig := api.b.ChainConfig().XDPoS.Epoch
 
 	// checkpoint block
-	checkpointNumber, epochNumber = s.GetCheckpointFromEpoch(ctx, epoch)
+	checkpointNumber, epochNumber = api.GetCheckpointFromEpoch(ctx, epoch)
 	result[fieldEpoch] = epochNumber.Int64()
 
-	block, err = s.b.BlockByNumber(ctx, checkpointNumber)
+	block, err = api.b.BlockByNumber(ctx, checkpointNumber)
 	if err != nil || block == nil { // || checkpointNumber == 0 {
 		result[fieldSuccess] = false
 		return result, err
@@ -760,9 +760,9 @@ func (s *BlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAddress 
 
 	// list of candidates (masternode, slash, propose) at block checkpoint
 	if epoch == rpc.LatestEpochNumber {
-		candidates, err = s.getCandidatesFromSmartContract()
+		candidates, err = api.getCandidatesFromSmartContract()
 	} else {
-		statedb, _, err := s.b.StateAndHeaderByNumber(ctx, checkpointNumber)
+		statedb, _, err := api.b.StateAndHeaderByNumber(ctx, checkpointNumber)
 		if err != nil {
 			result[fieldSuccess] = false
 			return result, err
@@ -785,17 +785,17 @@ func (s *BlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAddress 
 	}
 
 	var maxMasternodes int
-	if header.Number.Cmp(s.b.ChainConfig().XDPoS.V2.SwitchBlock) == 1 {
-		if engine, ok := s.b.Engine().(*XDPoS.XDPoS); ok {
+	if header.Number.Cmp(api.b.ChainConfig().XDPoS.V2.SwitchBlock) == 1 {
+		if engine, ok := api.b.Engine().(*XDPoS.XDPoS); ok {
 			round, err := engine.EngineV2.GetRoundNumber(header)
 			if err != nil {
 				return result, err
 			}
-			maxMasternodes = s.b.ChainConfig().XDPoS.V2.Config(uint64(round)).MaxMasternodes
+			maxMasternodes = api.b.ChainConfig().XDPoS.V2.Config(uint64(round)).MaxMasternodes
 		} else {
 			return result, errors.New("undefined XDPoS consensus engine")
 		}
-	} else if s.b.ChainConfig().IsTIPIncreaseMasternodes(block.Number()) {
+	} else if api.b.ChainConfig().IsTIPIncreaseMasternodes(block.Number()) {
 		maxMasternodes = common.MaxMasternodesV2
 	} else {
 		maxMasternodes = common.MaxMasternodes
@@ -814,7 +814,7 @@ func (s *BlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAddress 
 	}
 
 	// Get masternode list
-	if engine, ok := s.b.Engine().(*XDPoS.XDPoS); ok {
+	if engine, ok := api.b.Engine().(*XDPoS.XDPoS); ok {
 		masternodes = engine.GetMasternodesFromCheckpointHeader(header)
 		if len(masternodes) == 0 {
 			log.Error("Failed to get masternodes", "err", err, "len(masternodes)", len(masternodes), "blockNum", header.Number.Uint64())
@@ -855,7 +855,7 @@ func (s *BlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAddress 
 			break
 		}
 		blockNum := header.Number.Uint64() - epochConfig*uint64(i)
-		checkpointHeader, err := s.b.HeaderByNumber(ctx, rpc.BlockNumber(blockNum))
+		checkpointHeader, err := api.b.HeaderByNumber(ctx, rpc.BlockNumber(blockNum))
 		if checkpointHeader == nil || err != nil {
 			log.Error("Failed to get header by number", "num", blockNum, "err", err)
 			continue
@@ -885,7 +885,7 @@ func (s *BlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAddress 
 }
 
 // GetCandidates returns status of all candidates at a specified epochNumber
-func (s *BlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.EpochNumber) (map[string]interface{}, error) {
+func (api *BlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.EpochNumber) (map[string]interface{}, error) {
 	var (
 		block            *types.Block
 		header           *types.Header
@@ -900,12 +900,12 @@ func (s *BlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.EpochNumber
 	result := map[string]interface{}{
 		fieldSuccess: true,
 	}
-	epochConfig := s.b.ChainConfig().XDPoS.Epoch
+	epochConfig := api.b.ChainConfig().XDPoS.Epoch
 
-	checkpointNumber, epochNumber = s.GetCheckpointFromEpoch(ctx, epoch)
+	checkpointNumber, epochNumber = api.GetCheckpointFromEpoch(ctx, epoch)
 	result[fieldEpoch] = epochNumber.Int64()
 
-	block, err = s.b.BlockByNumber(ctx, checkpointNumber)
+	block, err = api.b.BlockByNumber(ctx, checkpointNumber)
 	if err != nil || block == nil { // || checkpointNumber == 0 {
 		result[fieldSuccess] = false
 		return result, err
@@ -919,9 +919,9 @@ func (s *BlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.EpochNumber
 	}
 	// list of candidates (masternode, slash, propose) at block checkpoint
 	if epoch == rpc.LatestEpochNumber {
-		candidates, err = s.getCandidatesFromSmartContract()
+		candidates, err = api.getCandidatesFromSmartContract()
 	} else {
-		statedb, _, err := s.b.StateAndHeaderByNumber(ctx, checkpointNumber)
+		statedb, _, err := api.b.StateAndHeaderByNumber(ctx, checkpointNumber)
 		if err != nil {
 			result[fieldSuccess] = false
 			return result, err
@@ -945,7 +945,7 @@ func (s *BlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.EpochNumber
 	}
 
 	// Find candidates that have masternode status
-	if engine, ok := s.b.Engine().(*XDPoS.XDPoS); ok {
+	if engine, ok := api.b.Engine().(*XDPoS.XDPoS); ok {
 		masternodes = engine.GetMasternodesFromCheckpointHeader(header)
 		if len(masternodes) == 0 {
 			log.Error("Failed to get masternodes", "err", err, "len(masternodes)", len(masternodes), "blockNum", header.Number.Uint64())
@@ -980,17 +980,17 @@ func (s *BlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.EpochNumber
 	}
 
 	var maxMasternodes int
-	if header.Number.Cmp(s.b.ChainConfig().XDPoS.V2.SwitchBlock) == 1 {
-		if engine, ok := s.b.Engine().(*XDPoS.XDPoS); ok {
+	if header.Number.Cmp(api.b.ChainConfig().XDPoS.V2.SwitchBlock) == 1 {
+		if engine, ok := api.b.Engine().(*XDPoS.XDPoS); ok {
 			round, err := engine.EngineV2.GetRoundNumber(header)
 			if err != nil {
 				return result, err
 			}
-			maxMasternodes = s.b.ChainConfig().XDPoS.V2.Config(uint64(round)).MaxMasternodes
+			maxMasternodes = api.b.ChainConfig().XDPoS.V2.Config(uint64(round)).MaxMasternodes
 		} else {
 			return result, errors.New("undefined XDPoS consensus engine")
 		}
-	} else if s.b.ChainConfig().IsTIPIncreaseMasternodes(block.Number()) {
+	} else if api.b.ChainConfig().IsTIPIncreaseMasternodes(block.Number()) {
 		maxMasternodes = common.MaxMasternodesV2
 	} else {
 		maxMasternodes = common.MaxMasternodes
@@ -1015,7 +1015,7 @@ func (s *BlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.EpochNumber
 			break
 		}
 		blockNum := header.Number.Uint64() - epochConfig*uint64(i)
-		checkpointHeader, err := s.b.HeaderByNumber(ctx, rpc.BlockNumber(blockNum))
+		checkpointHeader, err := api.b.HeaderByNumber(ctx, rpc.BlockNumber(blockNum))
 		if checkpointHeader == nil || err != nil {
 			log.Error("Failed to get header by number", "num", blockNum, "err", err)
 			continue
@@ -1051,16 +1051,16 @@ func (s *BlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.EpochNumber
 }
 
 // GetCheckpointFromEpoch returns header of the previous checkpoint
-func (s *BlockChainAPI) GetCheckpointFromEpoch(ctx context.Context, epochNum rpc.EpochNumber) (rpc.BlockNumber, rpc.EpochNumber) {
+func (api *BlockChainAPI) GetCheckpointFromEpoch(ctx context.Context, epochNum rpc.EpochNumber) (rpc.BlockNumber, rpc.EpochNumber) {
 	var checkpointNumber uint64
-	epoch := s.b.ChainConfig().XDPoS.Epoch
+	epoch := api.b.ChainConfig().XDPoS.Epoch
 
 	if epochNum == rpc.LatestEpochNumber {
-		blockNumer := s.b.CurrentBlock().Number()
-		if engine, ok := s.b.Engine().(*XDPoS.XDPoS); ok {
+		blockNumer := api.b.CurrentBlock().Number()
+		if engine, ok := api.b.Engine().(*XDPoS.XDPoS); ok {
 			var err error
 			var currentEpoch uint64
-			checkpointNumber, currentEpoch, err = engine.GetCurrentEpochSwitchBlock(s.chainReader, blockNumer)
+			checkpointNumber, currentEpoch, err = engine.GetCurrentEpochSwitchBlock(api.chainReader, blockNumer)
 			if err != nil {
 				log.Error("[GetCheckpointFromEpoch] Fail to get GetCurrentEpochSwitchBlock for current checkpoint block", "block", blockNumer, "err", err)
 				return 0, epochNum
@@ -1079,8 +1079,8 @@ func (s *BlockChainAPI) GetCheckpointFromEpoch(ctx context.Context, epochNum rpc
 }
 
 // getCandidatesFromSmartContract returns all candidates with their capacities at the current time
-func (s *BlockChainAPI) getCandidatesFromSmartContract() ([]utils.Masternode, error) {
-	client, err := s.b.GetIPCClient()
+func (api *BlockChainAPI) getCandidatesFromSmartContract() ([]utils.Masternode, error) {
+	client, err := api.b.GetIPCClient()
 	if err != nil {
 		return []utils.Masternode{}, err
 	}
@@ -1234,16 +1234,16 @@ func doCall(ctx context.Context, b Backend, args TransactionArgs, state *state.S
 
 // Call executes the given transaction on the state for the given block number.
 // It doesn't make and changes in the state/blockchain and is useful to execute and retrieve values.
-func (s *BlockChainAPI) Call(ctx context.Context, args TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, overrides *StateOverride, blockOverrides *BlockOverrides) (hexutil.Bytes, error) {
+func (api *BlockChainAPI) Call(ctx context.Context, args TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, overrides *StateOverride, blockOverrides *BlockOverrides) (hexutil.Bytes, error) {
 	if blockNrOrHash == nil {
 		latest := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
 		blockNrOrHash = &latest
 	}
-	timeout := s.b.RPCEVMTimeout()
+	timeout := api.b.RPCEVMTimeout()
 	if args.To != nil && *args.To == common.MasternodeVotingSMCBinary {
 		timeout = 0
 	}
-	result, err := DoCall(ctx, s.b, args, *blockNrOrHash, overrides, blockOverrides, timeout, s.b.RPCGasCap())
+	result, err := DoCall(ctx, api.b, args, *blockNrOrHash, overrides, blockOverrides, timeout, api.b.RPCGasCap())
 	if err != nil {
 		return nil, err
 	}
@@ -1297,12 +1297,12 @@ func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNr
 
 // EstimateGas returns an estimate of the amount of gas needed to execute the
 // given transaction against the current pending block.
-func (s *BlockChainAPI) EstimateGas(ctx context.Context, args TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, overrides *StateOverride) (hexutil.Uint64, error) {
+func (api *BlockChainAPI) EstimateGas(ctx context.Context, args TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, overrides *StateOverride) (hexutil.Uint64, error) {
 	bNrOrHash := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
 	if blockNrOrHash != nil {
 		bNrOrHash = *blockNrOrHash
 	}
-	return DoEstimateGas(ctx, s.b, args, bNrOrHash, overrides, s.b.RPCGasCap())
+	return DoEstimateGas(ctx, api.b, args, bNrOrHash, overrides, api.b.RPCGasCap())
 }
 
 // RPCMarshalHeader converts the given header to the RPC output .
@@ -1374,41 +1374,41 @@ func RPCMarshalBlock(block *types.Block, inclTx bool, fullTx bool, config *param
 
 // rpcMarshalBlock uses the generalized output filler, then adds the total difficulty field, which requires
 // a `BlockChainAPI`.
-func (s *BlockChainAPI) rpcMarshalBlock(ctx context.Context, b *types.Block, inclTx bool, fullTx bool) (map[string]interface{}, error) {
-	fields, err := RPCMarshalBlock(b, inclTx, fullTx, s.b.ChainConfig())
+func (api *BlockChainAPI) rpcMarshalBlock(ctx context.Context, b *types.Block, inclTx bool, fullTx bool) (map[string]interface{}, error) {
+	fields, err := RPCMarshalBlock(b, inclTx, fullTx, api.b.ChainConfig())
 	if err != nil {
 		return nil, err
 	}
 	if inclTx {
-		fields["totalDifficulty"] = (*hexutil.Big)(s.b.GetTd(ctx, b.Hash()))
+		fields["totalDifficulty"] = (*hexutil.Big)(api.b.GetTd(ctx, b.Hash()))
 	}
 	return fields, err
 }
 
 // findNearestSignedBlock finds the nearest checkpoint from input block
-func (s *BlockChainAPI) findNearestSignedBlock(ctx context.Context, b *types.Block) *types.Block {
+func (api *BlockChainAPI) findNearestSignedBlock(ctx context.Context, b *types.Block) *types.Block {
 	if b.Number().Int64() <= 0 {
 		return nil
 	}
 
 	blockNumber := b.Number().Uint64()
 	signedBlockNumber := blockNumber + (common.MergeSignRange - (blockNumber % common.MergeSignRange))
-	latestBlockNumber := s.b.CurrentBlock().Number()
+	latestBlockNumber := api.b.CurrentBlock().Number()
 
-	if signedBlockNumber >= latestBlockNumber.Uint64() || !s.b.ChainConfig().IsTIPSigning(b.Number()) {
+	if signedBlockNumber >= latestBlockNumber.Uint64() || !api.b.ChainConfig().IsTIPSigning(b.Number()) {
 		signedBlockNumber = blockNumber
 	}
 
 	// Get block epoc latest
-	checkpointNumber, _, err := s.b.Engine().(*XDPoS.XDPoS).GetCurrentEpochSwitchBlock(s.chainReader, big.NewInt(int64(signedBlockNumber)))
+	checkpointNumber, _, err := api.b.Engine().(*XDPoS.XDPoS).GetCurrentEpochSwitchBlock(api.chainReader, big.NewInt(int64(signedBlockNumber)))
 	if err != nil {
 		log.Error("[findNearestSignedBlock] Error while trying to get current Epoch switch block", "Number", signedBlockNumber)
 	}
 
-	checkpointBlock, _ := s.b.BlockByNumber(ctx, rpc.BlockNumber(checkpointNumber))
+	checkpointBlock, _ := api.b.BlockByNumber(ctx, rpc.BlockNumber(checkpointNumber))
 
 	if checkpointBlock != nil {
-		signedBlock, _ := s.b.BlockByNumber(ctx, rpc.BlockNumber(signedBlockNumber))
+		signedBlock, _ := api.b.BlockByNumber(ctx, rpc.BlockNumber(signedBlockNumber))
 		return signedBlock
 	}
 
@@ -1419,25 +1419,25 @@ func (s *BlockChainAPI) findNearestSignedBlock(ctx context.Context, b *types.Blo
 findFinalityOfBlock return finality of a block
 Use blocksHashCache for to keep track - refer core/blockchain.go for more detail
 */
-func (s *BlockChainAPI) findFinalityOfBlock(ctx context.Context, b *types.Block, masternodes []common.Address) (uint, error) {
-	engine, _ := s.b.Engine().(*XDPoS.XDPoS)
-	signedBlock := s.findNearestSignedBlock(ctx, b)
+func (api *BlockChainAPI) findFinalityOfBlock(ctx context.Context, b *types.Block, masternodes []common.Address) (uint, error) {
+	engine, _ := api.b.Engine().(*XDPoS.XDPoS)
+	signedBlock := api.findNearestSignedBlock(ctx, b)
 
 	if signedBlock == nil {
 		return 0, nil
 	}
 
-	signedBlocksHash := s.b.GetBlocksHashCache(signedBlock.Number().Uint64())
+	signedBlocksHash := api.b.GetBlocksHashCache(signedBlock.Number().Uint64())
 
 	// there is no cache for this block's number
 	// return the number(signers) / number(masternode) * 100 if this block is on canonical path
 	// else return 0 for fork path
 	if signedBlocksHash == nil {
-		if !s.b.AreTwoBlockSamePath(signedBlock.Hash(), b.Hash()) {
+		if !api.b.AreTwoBlockSamePath(signedBlock.Hash(), b.Hash()) {
 			return 0, nil
 		}
 
-		blockSigners, err := s.getSigners(ctx, signedBlock, engine)
+		blockSigners, err := api.getSigners(ctx, signedBlock, engine)
 		if blockSigners == nil {
 			return 0, err
 		}
@@ -1456,7 +1456,7 @@ func (s *BlockChainAPI) findFinalityOfBlock(ctx context.Context, b *types.Block,
 
 	for count := 0; count < len(signedBlocksHash); count++ {
 		blockHash := signedBlocksHash[count]
-		if s.b.AreTwoBlockSamePath(blockHash, b.Hash()) {
+		if api.b.AreTwoBlockSamePath(blockHash, b.Hash()) {
 			signedBlockSamePath = blockHash
 			break
 		}
@@ -1468,12 +1468,12 @@ func (s *BlockChainAPI) findFinalityOfBlock(ctx context.Context, b *types.Block,
 	}
 
 	// get signers and return finality
-	samePathSignedBlock, err := s.b.GetBlock(ctx, signedBlockSamePath)
+	samePathSignedBlock, err := api.b.GetBlock(ctx, signedBlockSamePath)
 	if samePathSignedBlock == nil {
 		return 0, err
 	}
 
-	blockSigners, err := s.getSigners(ctx, samePathSignedBlock, engine)
+	blockSigners, err := api.getSigners(ctx, samePathSignedBlock, engine)
 	if blockSigners == nil {
 		return 0, err
 	}
@@ -1484,14 +1484,14 @@ func (s *BlockChainAPI) findFinalityOfBlock(ctx context.Context, b *types.Block,
 /*
 Extract signers from block
 */
-func (s *BlockChainAPI) getSigners(ctx context.Context, block *types.Block, engine *XDPoS.XDPoS) ([]common.Address, error) {
+func (api *BlockChainAPI) getSigners(ctx context.Context, block *types.Block, engine *XDPoS.XDPoS) ([]common.Address, error) {
 	var err error
 	var filterSigners []common.Address
 	var signers []common.Address
 
-	masternodes := engine.GetMasternodes(s.chainReader, block.Header())
+	masternodes := engine.GetMasternodes(api.chainReader, block.Header())
 
-	signers, err = GetSignersFromBlocks(s.b, block.NumberU64(), block.Hash(), masternodes)
+	signers, err = GetSignersFromBlocks(api.b, block.NumberU64(), block.Hash(), masternodes)
 	if err != nil {
 		log.Error("Fail to get signers from block signer SC.", "error", err)
 		return nil, err
@@ -1512,25 +1512,25 @@ func (s *BlockChainAPI) getSigners(ctx context.Context, block *types.Block, engi
 	return filterSigners, nil
 }
 
-func (s *BlockChainAPI) rpcOutputBlockSigners(b *types.Block, ctx context.Context, masternodes []common.Address) ([]common.Address, error) {
-	_, err := s.b.GetIPCClient()
+func (api *BlockChainAPI) rpcOutputBlockSigners(b *types.Block, ctx context.Context, masternodes []common.Address) ([]common.Address, error) {
+	_, err := api.b.GetIPCClient()
 	if err != nil {
 		log.Error("Fail to connect IPC client for block status", "error", err)
 		return []common.Address{}, err
 	}
 
-	engine, ok := s.b.Engine().(*XDPoS.XDPoS)
+	engine, ok := api.b.Engine().(*XDPoS.XDPoS)
 	if !ok {
 		log.Error("Undefined XDPoS consensus engine")
 		return []common.Address{}, nil
 	}
 
-	signedBlock := s.findNearestSignedBlock(ctx, b)
+	signedBlock := api.findNearestSignedBlock(ctx, b)
 	if signedBlock == nil {
 		return []common.Address{}, nil
 	}
 
-	return s.getSigners(ctx, signedBlock, engine)
+	return api.getSigners(ctx, signedBlock, engine)
 }
 
 // RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction
@@ -1657,12 +1657,12 @@ type accessListResult struct {
 
 // CreateAccessList creates a EIP-2930 type AccessList for the given transaction.
 // Reexec and BlockNrOrHash can be specified to create the accessList on top of a certain state.
-func (s *BlockChainAPI) CreateAccessList(ctx context.Context, args TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash) (*accessListResult, error) {
+func (api *BlockChainAPI) CreateAccessList(ctx context.Context, args TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash) (*accessListResult, error) {
 	bNrOrHash := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
 	if blockNrOrHash != nil {
 		bNrOrHash = *blockNrOrHash
 	}
-	acl, gasUsed, vmerr, err := AccessList(ctx, s.b, bNrOrHash, args)
+	acl, gasUsed, vmerr, err := AccessList(ctx, api.b, bNrOrHash, args)
 	if err != nil {
 		return nil, err
 	}
@@ -3230,24 +3230,24 @@ func GetSignersFromBlocks(b Backend, blockNumber uint64, blockHash common.Hash, 
 // Formular:
 //
 //	ROI = average_latest_epoch_reward_for_voters*number_of_epoch_per_year/latest_total_cap*100
-func (s *BlockChainAPI) GetStakerROI() float64 {
-	blockNumber := s.b.CurrentBlock().Number().Uint64()
-	lastCheckpointNumber := blockNumber - (blockNumber % s.b.ChainConfig().XDPoS.Epoch) - s.b.ChainConfig().XDPoS.Epoch // calculate for 2 epochs ago
+func (api *BlockChainAPI) GetStakerROI() float64 {
+	blockNumber := api.b.CurrentBlock().Number().Uint64()
+	lastCheckpointNumber := blockNumber - (blockNumber % api.b.ChainConfig().XDPoS.Epoch) - api.b.ChainConfig().XDPoS.Epoch // calculate for 2 epochs ago
 	totalCap := new(big.Int).SetUint64(0)
 
-	mastersCap := s.b.GetMasternodesCap(lastCheckpointNumber)
+	mastersCap := api.b.GetMasternodesCap(lastCheckpointNumber)
 	if mastersCap == nil {
 		return 0
 	}
 
-	masternodeReward := new(big.Int).Mul(new(big.Int).SetUint64(s.b.ChainConfig().XDPoS.Reward), new(big.Int).SetUint64(params.Ether))
+	masternodeReward := new(big.Int).Mul(new(big.Int).SetUint64(api.b.ChainConfig().XDPoS.Reward), new(big.Int).SetUint64(params.Ether))
 
 	for _, cap := range mastersCap {
 		totalCap.Add(totalCap, cap)
 	}
 
 	holderReward := new(big.Int).Div(masternodeReward, new(big.Int).SetUint64(2))
-	EpochPerYear := 365 * 86400 / s.b.GetEpochDuration().Uint64()
+	EpochPerYear := 365 * 86400 / api.b.GetEpochDuration().Uint64()
 	voterRewardAYear := new(big.Int).Mul(holderReward, new(big.Int).SetUint64(EpochPerYear))
 	return 100.0 / float64(totalCap.Div(totalCap, voterRewardAYear).Uint64())
 }
@@ -3257,8 +3257,8 @@ func (s *BlockChainAPI) GetStakerROI() float64 {
 // Formular:
 //
 //	ROI = latest_epoch_reward_for_voters*number_of_epoch_per_year/latest_total_cap*100
-func (s *BlockChainAPI) GetStakerROIMasternode(masternode common.Address) float64 {
-	votersReward := s.b.GetVotersRewards(masternode)
+func (api *BlockChainAPI) GetStakerROIMasternode(masternode common.Address) float64 {
+	votersReward := api.b.GetVotersRewards(masternode)
 	if votersReward == nil {
 		return 0
 	}
@@ -3270,10 +3270,10 @@ func (s *BlockChainAPI) GetStakerROIMasternode(masternode common.Address) float6
 		masternodeReward.Add(masternodeReward, reward)
 	}
 
-	blockNumber := s.b.CurrentBlock().Number().Uint64()
-	lastCheckpointNumber := blockNumber - blockNumber%s.b.ChainConfig().XDPoS.Epoch
+	blockNumber := api.b.CurrentBlock().Number().Uint64()
+	lastCheckpointNumber := blockNumber - blockNumber%api.b.ChainConfig().XDPoS.Epoch
 	totalCap := new(big.Int).SetUint64(0)
-	votersCap := s.b.GetVotersCap(new(big.Int).SetUint64(lastCheckpointNumber), masternode, voters)
+	votersCap := api.b.GetVotersCap(new(big.Int).SetUint64(lastCheckpointNumber), masternode, voters)
 
 	for _, cap := range votersCap {
 		totalCap.Add(totalCap, cap)
@@ -3281,7 +3281,7 @@ func (s *BlockChainAPI) GetStakerROIMasternode(masternode common.Address) float6
 
 	// holder reward = 50% total reward of a masternode
 	holderReward := new(big.Int).Div(masternodeReward, new(big.Int).SetUint64(2))
-	EpochPerYear := 365 * 86400 / s.b.GetEpochDuration().Uint64()
+	EpochPerYear := 365 * 86400 / api.b.GetEpochDuration().Uint64()
 	voterRewardAYear := new(big.Int).Mul(holderReward, new(big.Int).SetUint64(EpochPerYear))
 
 	return 100.0 / float64(totalCap.Div(totalCap, voterRewardAYear).Uint64())
@@ -3294,8 +3294,8 @@ type currentTotalMinted struct {
 	BlockNumber  *hexutil.Big `json:"blockNumber"`
 }
 
-func (s *BlockChainAPI) GetCurrentTotalMinted(ctx context.Context) (*currentTotalMinted, error) {
-	statedb, header, err := s.b.StateAndHeaderByNumber(ctx, rpc.LatestBlockNumber)
+func (api *BlockChainAPI) GetCurrentTotalMinted(ctx context.Context) (*currentTotalMinted, error) {
+	statedb, header, err := api.b.StateAndHeaderByNumber(ctx, rpc.LatestBlockNumber)
 	if err != nil {
 		return nil, err
 	}
