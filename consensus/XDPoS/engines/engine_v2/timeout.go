@@ -187,8 +187,7 @@ func (x *XDPoS_v2) verifyTC(chain consensus.ChainReader, timeoutCert *types.Time
 	var wg sync.WaitGroup
 	wg.Add(len(signatures))
 
-	var mutex sync.Mutex
-	var haveError error
+	errorCh := make(chan error, len(signatures))
 
 	signedTimeoutObj := types.TimeoutSigHash(&types.TimeoutForSign{
 		Round:     timeoutCert.Round,
@@ -201,23 +200,19 @@ func (x *XDPoS_v2) verifyTC(chain consensus.ChainReader, timeoutCert *types.Time
 			verified, _, err := x.verifyMsgSignature(signedTimeoutObj, sig, snap.NextEpochCandidates)
 			if err != nil || !verified {
 				log.Error("[verifyTC] Error or verification failure", "signature", sig, "error", err)
-				mutex.Lock() // Lock before accessing haveError
-				if haveError == nil {
-					if err != nil {
-						log.Error("[verifyTC] Error while verfying TC message signatures", "tcRound", timeoutCert.Round, "tcGapNumber", timeoutCert.GapNumber, "tcSignLen", len(signatures), "error", err)
-						haveError = fmt.Errorf("error while verifying TC message signatures, %s", err)
-					} else {
-						log.Warn("[verifyTC] Signature not verified doing TC verification", "tcRound", timeoutCert.Round, "tcGapNumber", timeoutCert.GapNumber, "tcSignLen", len(signatures))
-						haveError = errors.New("fail to verify TC due to signature mis-match")
-					}
+				if err != nil {
+					log.Error("[verifyTC] Error while verfying TC message signatures", "tcRound", timeoutCert.Round, "tcGapNumber", timeoutCert.GapNumber, "tcSignLen", len(signatures), "error", err)
+					errorCh <- fmt.Errorf("error while verifying TC message signatures: %w", err)
+				} else {
+					log.Warn("[verifyTC] Signature not verified doing TC verification", "tcRound", timeoutCert.Round, "tcGapNumber", timeoutCert.GapNumber, "tcSignLen", len(signatures))
+					errorCh <- errors.New("fail to verify TC due to signature mismatch")
 				}
-				mutex.Unlock() // Unlock after modifying haveError
 			}
 		}(signature)
 	}
 	wg.Wait()
-	if haveError != nil {
-		return haveError
+	if len(errorCh) > 0 {
+		return <-errorCh
 	}
 	return nil
 }
