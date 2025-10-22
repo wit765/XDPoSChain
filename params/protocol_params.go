@@ -19,8 +19,8 @@ package params
 import "math/big"
 
 var (
-	TargetGasLimit uint64 = XDCGenesisGasLimit // The artificial target
-	V2TestsGasLimit uint64 = 1200000000        // The gas limit used in the v2 consensus tests
+	TargetGasLimit  uint64 = XDCGenesisGasLimit // The artificial target
+	V2TestsGasLimit uint64 = 1200000000         // The gas limit used in the v2 consensus tests
 )
 
 const (

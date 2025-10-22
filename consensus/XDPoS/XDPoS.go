@@ -224,7 +224,6 @@ func (x *XDPoS) VerifyHeaders(chain consensus.ChainReader, headers []*types.Head
 		}
 	}
 
-
 	if v1headers != nil {
 		x.EngineV1.VerifyHeaders(chain, v1headers, v1fullVerifies, abort, results)
 	}
