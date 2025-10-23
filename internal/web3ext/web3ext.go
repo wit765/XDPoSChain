@@ -19,7 +19,6 @@ package web3ext
 
 var Modules = map[string]string{
 	"admin":       AdminJs,
-	"chequebook":  ChequebookJs,
 	"clique":      CliqueJs,
 	"XDPoS":       XdposJs,
 	"debug":       DebugJs,
@@ -27,43 +26,10 @@ var Modules = map[string]string{
 	"miner":       MinerJs,
 	"net":         NetJs,
 	"rpc":         RpcJs,
-	"shh":         ShhJs,
 	"XDCx":        XdcxJs,
 	"XDCxlending": XdcxLendingJs,
-	"swarmfs":     SwarmfsJs,
 	"txpool":      TxpoolJs,
 }
-
-const ChequebookJs = `
-web3._extend({
-	property: 'chequebook',
-	methods: [
-		new web3._extend.Method({
-			name: 'deposit',
-			call: 'chequebook_deposit',
-			params: 1,
-			inputFormatter: [null]
-		}),
-		new web3._extend.Property({
-			name: 'balance',
-			getter: 'chequebook_balance',
-			outputFormatter: web3._extend.utils.toDecimal
-		}),
-		new web3._extend.Method({
-			name: 'cash',
-			call: 'chequebook_cash',
-			params: 1,
-			inputFormatter: [null]
-		}),
-		new web3._extend.Method({
-			name: 'issue',
-			call: 'chequebook_issue',
-			params: 2,
-			inputFormatter: [null, null]
-		}),
-	]
-});
-`
 
 const CliqueJs = `
 web3._extend({
@@ -695,26 +661,6 @@ web3._extend({
 });
 `
 
-const ShhJs = `
-web3._extend({
-	property: 'shh',
-	methods: [
-	],
-	properties:
-	[
-		new web3._extend.Property({
-			name: 'version',
-			getter: 'shh_version',
-			outputFormatter: web3._extend.utils.toDecimal
-		}),
-		new web3._extend.Property({
-			name: 'info',
-			getter: 'shh_info'
-		}),
-	]
-});
-`
-
 const XdcxJs = `
 web3._extend({
 	property: 'XDCx',
@@ -1035,29 +981,6 @@ web3._extend({
    });
 */
 
-const SwarmfsJs = `
-web3._extend({
-	property: 'swarmfs',
-	methods:
-	[
-		new web3._extend.Method({
-			name: 'mount',
-			call: 'swarmfs_mount',
-			params: 2
-		}),
-		new web3._extend.Method({
-			name: 'unmount',
-			call: 'swarmfs_unmount',
-			params: 1
-		}),
-		new web3._extend.Method({
-			name: 'listmounts',
-			call: 'swarmfs_listmounts',
-			params: 0
-		}),
-	]
-});
-`
 
 const TxpoolJs = `
 web3._extend({
