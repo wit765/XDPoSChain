@@ -388,10 +388,9 @@ func (n *network) forget(blocknum uint64) {
 	n.chain = n.chain[index:]
 	n.receipts = n.receipts[index:]
 	n.offset = int(blocknum)
-
 }
-func (n *network) progress(numBlocks int) {
 
+func (n *network) progress(numBlocks int) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	//fmt.Printf("progressing...\n")
@@ -399,7 +398,6 @@ func (n *network) progress(numBlocks int) {
 	n.chain = append(n.chain, newBlocks...)
 	n.receipts = append(n.receipts, newR...)
 	n.cond.Broadcast()
-
 }
 
 func (n *network) headers(from int) []*types.Header {

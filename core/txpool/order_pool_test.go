@@ -70,7 +70,6 @@ func getNonce(t *testing.T, userAddress common.Address) (uint64, error) {
 	return n, err
 }
 func testSendOrder(t *testing.T, amount, price *big.Int, side string, status string, orderID uint64) {
-
 	client, err := ethclient.Dial("http://127.0.0.1:8501")
 	if err != nil {
 		log.Print(err)
@@ -105,7 +104,6 @@ func testSendOrder(t *testing.T, amount, price *big.Int, side string, status str
 }
 
 func testSendOrderXDCUSD(t *testing.T, amount, price *big.Int, side string, status string, orderID uint64) {
-
 	client, err := ethclient.Dial("http://127.0.0.1:8501")
 	if err != nil {
 		log.Print(err)
@@ -140,7 +138,6 @@ func testSendOrderXDCUSD(t *testing.T, amount, price *big.Int, side string, stat
 }
 
 func testSendOrderBTCUSD(t *testing.T, amount, price *big.Int, side string, status string, orderID uint64) {
-
 	client, err := ethclient.Dial("http://127.0.0.1:8501")
 	if err != nil {
 		log.Print(err)
@@ -175,7 +172,6 @@ func testSendOrderBTCUSD(t *testing.T, amount, price *big.Int, side string, stat
 }
 
 func testSendOrderXDCBTC(t *testing.T, amount, price *big.Int, side string, status string, orderID uint64) {
-
 	client, err := ethclient.Dial("http://127.0.0.1:8501")
 	if err != nil {
 		log.Print(err)
@@ -210,7 +206,6 @@ func testSendOrderXDCBTC(t *testing.T, amount, price *big.Int, side string, stat
 }
 
 func testSendOrderETHBTC(t *testing.T, amount, price *big.Int, side string, status string, orderID uint64) {
-
 	client, err := ethclient.Dial("http://127.0.0.1:8501")
 	if err != nil {
 		log.Print(err)
@@ -251,6 +246,7 @@ func TestSendBuyOrder(t *testing.T) {
 func TestSendSellOrder(t *testing.T) {
 	testSendOrder(t, new(big.Int).SetUint64(1000000000000000000), new(big.Int).SetUint64(100000000000000000), "SELL", "NEW", 0)
 }
+
 func TestFilled(t *testing.T) {
 	////BTC/XDC
 	//BTCUSDPrice := new(big.Int).Mul(big.NewInt(1000000000000000000), big.NewInt(5000))
@@ -280,7 +276,6 @@ func TestFilled(t *testing.T) {
 	testSendOrderXDCUSD(t, new(big.Int).Mul(big.NewInt(600000), _1E18), XDCUSDPrice, "BUY", "NEW", 0)
 	time.Sleep(2 * time.Second)
 	testSendOrderXDCUSD(t, new(big.Int).Mul(big.NewInt(1200000), _1E18), XDCUSDPrice, "SELL", "NEW", 0)
-
 }
 
 func TestX10Filled(t *testing.T) {
@@ -291,13 +286,12 @@ func TestX10Filled(t *testing.T) {
 	testSendOrderXDCUSD(t, new(big.Int).Mul(big.NewInt(600000), _1E18), XDCUSDPrice, "BUY", "NEW", 0)
 	time.Sleep(2 * time.Second)
 	testSendOrderXDCUSD(t, new(big.Int).Mul(big.NewInt(1200000), _1E18), XDCUSDPrice, "SELL", "NEW", 0)
-
 }
+
 func TestPartialFilled(t *testing.T) {
-
 }
-func TestNoMatch(t *testing.T) {
 
+func TestNoMatch(t *testing.T) {
 }
 
 func TestCancelOrder(t *testing.T) {

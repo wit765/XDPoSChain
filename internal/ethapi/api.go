@@ -2283,7 +2283,6 @@ func (s *PublicXDCXTransactionPoolAPI) GetOrderCount(ctx context.Context, addr c
 }
 
 func (s *PublicXDCXTransactionPoolAPI) GetBestBid(ctx context.Context, baseToken, quoteToken common.Address) (PriceVolume, error) {
-
 	result := PriceVolume{}
 	block := s.b.CurrentBlock()
 	if block == nil {

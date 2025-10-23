@@ -118,10 +118,9 @@ func (l *LendingMsg) computeHash() common.Hash {
 	}
 
 	return common.BytesToHash(sha.Sum(nil))
-
 }
-func testSendLending(key string, nonce uint64, lendToken, collateralToken common.Address, amount *big.Int, interest uint64, side string, status string, autoTopUp bool, lendingId, tradeId uint64, cancelledHash common.Hash, extraData string) {
 
+func testSendLending(key string, nonce uint64, lendToken, collateralToken common.Address, amount *big.Int, interest uint64, side string, status string, autoTopUp bool, lendingId, tradeId uint64, cancelledHash common.Hash, extraData string) {
 	client, err := ethclient.Dial("http://127.0.0.1:8501")
 	if err != nil {
 		log.Print(err)

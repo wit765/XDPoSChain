@@ -154,7 +154,6 @@ func (db *MongoDatabase) HasObject(hash common.Hash, val interface{}) (bool, err
 		if count == 1 {
 			return true, nil
 		}
-
 	}
 	return false, nil
 }
@@ -335,7 +334,6 @@ func (db *MongoDatabase) DeleteObject(hash common.Hash, val interface{}) error {
 			if err != nil && err != mgo.ErrNotFound {
 				return fmt.Errorf("failed to delete lendingTrade. Err: %v", err)
 			}
-
 		}
 	}
 
