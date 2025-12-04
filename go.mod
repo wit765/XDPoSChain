@@ -33,7 +33,7 @@ require (
 require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0
-	github.com/consensys/gnark-crypto v0.10.0
+	github.com/consensys/gnark-crypto v0.18.1
 	github.com/deckarep/golang-set/v2 v2.7.0
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1
 	github.com/dop251/goja v0.0.0-20230605162241-28ee0ee714f3
